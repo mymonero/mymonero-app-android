@@ -1,5 +1,5 @@
 //
-//  MainActivity.kt
+//  MainApplication.kt
 //  MyMonero
 //
 //  Copyright (c) 2014-2018, MyMonero.com
@@ -30,29 +30,22 @@
 //  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-
 package com.mymonero.mymonero
 
-    import android.support.v7.app.AppCompatActivity
-    import android.os.Bundle
-    import kotlinx.android.synthetic.main.activity_main.*
-    import android.util.Log
-    import java.io.File
-    import android.content.Context
+import android.app.Application
+import android.content.Context
 
-    class MainActivity : AppCompatActivity() {
-
-        override fun onCreate(savedInstanceState: Bundle?) {
-            super.onCreate(savedInstanceState)
-
-            setContentView(R.layout.activity_main)
-        }
-
-        companion object {
-
-            // Used to load the 'native-lib' library on application startup.
-            init {
-                System.loadLibrary("native-lib")
-            }
-        }
-    }
+class MainApplication : Application() {
+	init {
+		instance = this
+	}
+	companion object {
+		private lateinit var instance: MainApplication
+		fun applicationContext(): Context {
+			return instance.applicationContext
+		}
+	}
+	override fun onCreate() {
+		super.onCreate()
+	}
+}
