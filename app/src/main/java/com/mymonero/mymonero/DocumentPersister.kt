@@ -42,6 +42,8 @@ import java.io.*
 typealias DocumentId = String
 typealias CollectionName = String
 typealias DocumentContentString = String
+typealias DocumentJSON = Map<String, Any>
+typealias MutableDocumentJSON = MutableMap<String, Any>
 
 data class DocumentFileDescription(
 	val inCollectionName: CollectionName,
@@ -77,8 +79,25 @@ object DocumentPersister {
 		val err_str: String?,
 		val string: String?
 	)
+	data class ErrorOr_NumRemoved(
+		val err_str: String?,
+		val numRemoved: Int?
+	)
 	//
 	// Interface - Accessors
+	// Or if you are writing the file data directly, read with:
+	fun DocumentsData(
+		ids: List<DocumentId>,
+		collectionName: CollectionName
+	): ErrorOr_DocumentContentStrings {
+		val fileDescriptions = ids.map{
+			DocumentFileDescription(
+				inCollectionName = collectionName,
+				documentId = it
+			)
+		}
+		return this._read_existentDocumentContentStrings(fileDescriptions)
+	}
 	fun IdsOfAllDocuments(
 		collectionName: CollectionName
 	): ErrorOr_DocumentIds {
@@ -122,6 +141,34 @@ object DocumentPersister {
 			string = documentFileWithString
 		)
 		return null // no error string (yet)
+	}
+	fun RemoveDocuments(
+		collectionName: CollectionName,
+		ids: List<DocumentId>
+	): ErrorOr_NumRemoved {
+		var numRemoved = 0
+		for (id in ids) {
+			val fileDescription = DocumentFileDescription(
+				inCollectionName = collectionName,
+				documentId = id
+			)
+			val context = MainApplication.applicationContext()
+			val deleted = context.deleteFile(fileDescription.new_filename)
+			if (deleted) {
+				numRemoved += 1
+			}
+		}
+		assert(numRemoved == ids.count())
+		return ErrorOr_NumRemoved(null, numRemoved)
+	}
+	fun RemoveAllDocuments(
+		collectionName: CollectionName
+	): ErrorOr_NumRemoved {
+		val (err_str, ids) = this.IdsOfAllDocuments(collectionName)
+		if (err_str != null) {
+			return ErrorOr_NumRemoved(err_str, null)
+		}
+		return this.RemoveDocuments(collectionName = collectionName, ids = ids!!)
 	}
 	//
 	// Internal - Accessors - Files

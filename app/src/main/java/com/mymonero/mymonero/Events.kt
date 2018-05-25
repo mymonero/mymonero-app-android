@@ -1,5 +1,5 @@
 //
-//  MainActivity.kt
+//  DocumentPersister.kt
 //  MyMonero
 //
 //  Copyright (c) 2014-2018, MyMonero.com
@@ -33,26 +33,30 @@
 
 package com.mymonero.mymonero
 
-import android.support.v7.app.AppCompatActivity
-import android.os.Bundle
-import kotlinx.android.synthetic.main.activity_main.*
-import android.util.Log
-import java.io.File
-import android.content.Context
+import java.util.*
 
-class MainActivity : AppCompatActivity() {
+typealias EventSubscriptionToken = String
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        setContentView(R.layout.activity_main)
-    }
-
-    companion object {
-
-        // Used to load the 'native-lib' library on application startup.
-        init {
-            System.loadLibrary("native-lib")
-        }
-    }
+class EventEmitter<TS, TA> { // TS: source; TA: arg
+	companion object {
+		private fun new_subscriptionToken(): EventSubscriptionToken = UUID.randomUUID().toString() // hopefully this isn't too slow
+	}
+	private val invocationMap = mutableMapOf<EventSubscriptionToken, (TS,TA) -> Unit>()
+	//
+	// Interface
+	fun startObserving(m: (TS,TA) -> Unit): EventSubscriptionToken {
+		val token = EventEmitter.new_subscriptionToken()
+		invocationMap[token] = (m)
+	//
+		return token
+	}
+	fun stopObserving(token: EventSubscriptionToken) {
+		invocationMap.remove(token)
+	}
+	operator fun invoke(source: TS, arg: TA) {
+		// call by executing instance of this as if function
+		for ((_, m) in invocationMap) {
+			m(source, arg)
+		}
+	}
 }
