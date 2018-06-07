@@ -40,7 +40,8 @@ import com.squareup.moshi.Types
 import tgio.rncryptor.RNCryptorNative
 import java.nio.charset.Charset
 
-open class PersistableObject {
+open class PersistableObject
+{
 	//
 	// Properties
 	var passwordProvider: PasswordProvider
@@ -112,15 +113,21 @@ open class PersistableObject {
 
 			return dict!!
 		}
-		fun new_plaintextJSONStringFrom(encryptedString: String, passwordProvider: PasswordProvider): String
-		{ // assumes pw has been entered
-			assert(passwordProvider.password != null)
-			return RNCryptorNative().decrypt(encryptedString, passwordProvider.password!!)
+		fun new_plaintextJSONStringFromDocumentDict(dict: Map<String, Any>): String
+		{
+			val jsonAdapter: JsonAdapter<Map<String, Any>> = Moshi.Builder().build().adapter(
+				Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java)
+			)
+			return jsonAdapter.toJson(dict)
 		}
-		fun new_encryptedJSONStringFrom(plaintextString: String, passwordProvider: PasswordProvider): String
+		//
+		fun new_plaintextStringFrom(encryptedString: String, password: Password): String
 		{ // assumes pw has been entered
-			assert(passwordProvider.password != null)
-			val encryptedString = RNCryptorNative().encrypt(plaintextString, passwordProvider.password!!).toString(Charset.forName("UTF-8"))
+			return RNCryptorNative().decrypt(encryptedString, password)
+		}
+		fun new_encryptedStringFrom(plaintextString: String, password: Password): String
+		{ // assumes pw has been entered
+			val encryptedString = RNCryptorNative().encrypt(plaintextString, password).toString(Charset.forName("UTF-8"))
 
 			return encryptedString
 		}
@@ -129,14 +136,9 @@ open class PersistableObject {
 	// Internal - Accessors
 	fun new_encrypted_serializedFileRepresentation(): String {
 		val plaintextDict = this.new_dictRepresentation()
-		val jsonAdapter: JsonAdapter<Map<String, Any>> = Moshi.Builder().build().adapter(
-			Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java)
-		)
-		val plaintextString = jsonAdapter.toJson(plaintextDict)
-		val encryptedString = PersistableObject.new_encryptedJSONStringFrom(
-			plaintextString,
-			this.passwordProvider
-		)
+		val plaintextString = PersistableObject.new_plaintextJSONStringFromDocumentDict(plaintextDict)
+		val encryptedString = PersistableObject.new_encryptedStringFrom(plaintextString, this.passwordProvider.password!!)
+		//
 		return encryptedString
 	}
 

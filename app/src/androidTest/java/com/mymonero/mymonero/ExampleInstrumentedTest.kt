@@ -45,6 +45,8 @@ import org.junit.Assert.*
 import android.util.Log
 import org.junit.Assert
 
+import java.util.UUID
+
 /**
  * Instrumented test, which will execute on an Android device.
  *
@@ -110,8 +112,8 @@ class ExampleInstrumentedTest {
 	val mockedSavedObjects__LogTag = "mockedSavedObjects"
 	val mockedSavedObjects__addtlValDummy = "Some extra test data"
 	object MockedPasswordProvider: PasswordProvider
-	{
-		override var password: String? = "dummy password"
+	{ // this class is no longer necessary
+		override var password: Password? = "dummy password"
 	}
 	class MockedSavedObject: PersistableObject
 	{
@@ -164,9 +166,9 @@ class ExampleInstrumentedTest {
 		Assert.assertTrue(documentContentStrings != null)
 		Assert.assertTrue(documentContentStrings!!.count() > 0)
 		for (encrypted_documentContentString in documentContentStrings) {
-			val plaintext_documentContentString = PersistableObject.new_plaintextJSONStringFrom(
+			val plaintext_documentContentString = PersistableObject.new_plaintextStringFrom(
 				encrypted_documentContentString,
-				passwordProvider = MockedPasswordProvider
+				password = MockedPasswordProvider.password!!
 			)
 			val plaintext_documentJSON = PersistableObject.new_plaintextDocumentDictFromJSONString(plaintext_documentContentString)
 			val listedObjectInstance = MockedSavedObject(
@@ -193,9 +195,9 @@ class ExampleInstrumentedTest {
 		Assert.assertTrue(documentContentStrings != null)
 		Assert.assertTrue(documentContentStrings!!.count() > 0)
 		for (encrypted_documentContentString in documentContentStrings) {
-			val plaintext_documentContentString = PersistableObject.new_plaintextJSONStringFrom(
+			val plaintext_documentContentString = PersistableObject.new_plaintextStringFrom(
 				encrypted_documentContentString,
-				passwordProvider = MockedPasswordProvider
+				password = MockedPasswordProvider.password!!
 			)
 			val plaintext_documentJSON = PersistableObject.new_plaintextDocumentDictFromJSONString(plaintext_documentContentString)
 			val listedObjectInstance = MockedSavedObject(
@@ -208,5 +210,182 @@ class ExampleInstrumentedTest {
 			val delete__errStr = listedObjectInstance.delete()
 			Assert.assertTrue(delete__errStr == null)
 		}
+	}
+	//
+	// PasswordController
+	val mockedPasswords__LogTag = "mockedPasswords"
+	//
+	object MockedPasswords_CorrectEntryDelegate: PasswordEntryDelegate
+	{
+		val uuid = UUID.randomUUID().toString()
+		val createNewUserInput = "a mock password"
+		val getExistingUserInput = "a mock password"
+		val expectedPasswordType = PasswordType.password
+		//
+		override fun identifier(): String {
+			return this.uuid
+		}
+
+		public override fun getUserToEnterNewPasswordAndType(
+			isForChangePassword: Boolean,
+			enterNewPasswordAndType_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?,
+				passwordType: PasswordType?
+			) -> Unit
+		) {
+			assert(isForChangePassword == false)
+			assert(PasswordController.password == null && PasswordController.passwordType == null)
+			//
+			val userInput =  createNewUserInput
+			val passwordType = PasswordType.new_detectedFromPassword(userInput)
+			assert(passwordType == expectedPasswordType)
+			//
+			enterNewPasswordAndType_cb(
+				false, // didn't cancel
+				userInput,
+				passwordType
+			)
+		}
+		override fun getUserToEnterExistingPassword(
+			isForChangePassword: Boolean,
+			isForAuthorizingAppActionOnly: Boolean,
+			customNavigationBarTitle: String?,
+			enterExistingPassword_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?
+			) -> Unit
+		) {
+			assert(isForChangePassword == false)
+			assert(PasswordController.password != null && PasswordController.passwordType != null)
+			//
+			val userInput = getExistingUserInput
+			//
+			enterExistingPassword_cb(
+				false, // didn't cancel
+				userInput
+			)
+		}
+	}
+	object MockedPasswords_IncorrectEntryDelegate: PasswordEntryDelegate
+	{
+		val uuid = UUID.randomUUID().toString()
+		val userInput = "an INCORRECT mock password"
+		//
+		override fun identifier(): String {
+			return this.uuid
+		}
+
+		public override fun getUserToEnterNewPasswordAndType(
+			isForChangePassword: Boolean,
+			enterNewPasswordAndType_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?,
+				passwordType: PasswordType?
+			) -> Unit
+		) {
+			assert(false) // Not expecting this - if the tester ran 'correct entry' first
+		}
+		override fun getUserToEnterExistingPassword(
+			isForChangePassword: Boolean,
+			isForAuthorizingAppActionOnly: Boolean,
+			customNavigationBarTitle: String?,
+			enterExistingPassword_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?
+			) -> Unit
+		) {
+			assert(isForChangePassword == false)
+			assert(PasswordController.password == MockedPasswords_CorrectEntryDelegate.createNewUserInput)
+			assert(PasswordController.passwordType == MockedPasswords_CorrectEntryDelegate.expectedPasswordType)
+			//
+			enterExistingPassword_cb(
+				false, // didn't cancel
+				this.userInput // feed incorrect password - and expect fail
+			)
+		}
+	}
+
+	@Test fun mockedPasswords__correctEntry_getPassword_createIfNecessary()
+	{
+		PasswordController.setPasswordEntryDelegate(MockedPasswords_CorrectEntryDelegate) // for this test
+		//
+		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assert(false) // should never see this
+			}
+		)
+		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assert(false) // should never see this
+			}
+		)
+		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assert(false) // should never see this
+			}
+		)
+		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assert(false) // should never see this
+			}
+		)
+		//
+		PasswordController.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				Log.d(mockedPasswords__LogTag, "Obtained ${passwordType} from user ${password}")
+
+				assert(PasswordController.password == password)
+				assert(PasswordController.passwordType == passwordType)
+			},
+			userCanceled_fn = {
+				Log.d(mockedPasswords__LogTag, "User canceled pw input")
+				assert(false) // not expecting this
+			}
+		)
+		//
+		// This should not be necessary but the above code may become asynchronous
+		Thread.sleep(50) // TODO: see if we can remove this
+	}
+	@Test fun mockedPasswords__incorrectEntry_getPassword()
+	{
+		PasswordController.setPasswordEntryDelegate(MockedPasswords_IncorrectEntryDelegate) // for this test
+		//
+		var didError = false
+		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assert(false) // should never see this
+			}
+		)
+		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				didError = true
+				assertEquals(err_str, R.string.incorrect_password) // this may be too fragile but making it dynamic might make the test less useful
+			}
+		)
+		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assert(false) // should never see this
+			}
+		)
+		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assert(false) // should never see this
+			}
+		)
+		//
+		PasswordController.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				assert(false) // should never be allowed to get here with incorrect input
+			},
+			userCanceled_fn = {
+				assert(false) // not expecting that
+			}
+		)
+		//
+		// This may not be necessary but the above code may become asynchronous
+		Thread.sleep(500) // TODO: see if we can remove this
+		//
+		assertTrue("Wrong password entered was not picked up", didError)
 	}
 }

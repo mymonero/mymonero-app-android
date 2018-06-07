@@ -46,8 +46,8 @@ class EventEmitter<TS, TA> { // TS: source; TA: arg
 	// Interface
 	fun startObserving(m: (TS,TA) -> Unit): EventSubscriptionToken {
 		val token = EventEmitter.new_subscriptionToken()
-		invocationMap[token] = (m)
-	//
+		invocationMap[token] = m
+		//
 		return token
 	}
 	fun stopObserving(token: EventSubscriptionToken) {

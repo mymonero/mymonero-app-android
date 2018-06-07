@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">MyMonero</string>
+
+	<!-- PasswordController -->
+    <string name="incorrect_password">Incorrect password</string>
+    <string name="incorrect_PIN">Incorrect PIN</string>
+    <string name="as_a_security_precaution_please_wait">As a security precaution, please wait a few moments before trying again.</string>
+    <string name="enter_longer_pin">Please enter a longer PIN.</string>
+    <string name="enter_longer_password">Please enter a longer password.</string>
+    <string name="unrecognized_password_type">Unrecognized password type</string>
+    <string name="enter_fresh_pin">Please enter a fresh password.</string>
+    <string name="enter_fresh_password">Please enter a fresh PIN.</string>
+
+
+
 </resources>
