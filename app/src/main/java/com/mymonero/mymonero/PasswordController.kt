@@ -34,6 +34,7 @@
 package com.mymonero.mymonero
 
 import android.util.Log
+import junit.framework.Assert
 import tgio.rncryptor.RNCryptorNative
 import java.util.Timer
 import kotlin.concurrent.schedule
@@ -183,13 +184,11 @@ object PasswordController: PasswordProvider
 				collectionName = this.collectionName
 			)
 			if (err_str != null) {
-				assert(false) // throw? ".hasUserSavedAPassword: ${err_str!)}"
-				return false
+				throw AssertionError(".hasUserSavedAPassword: ${err_str}")
 			}
 			val numberOfIds = ids!!.count()
 			if (numberOfIds > 1) {
-				assert(false) // throw? "Illegal: Should be only one document"
-				return false
+				throw AssertionError("Illegal: Should be only one document")
 			} else if (numberOfIds == 0) {
 				return false
 			}
@@ -201,22 +200,18 @@ object PasswordController: PasswordProvider
 	fun setPasswordEntryDelegate(to_delegate: PasswordEntryDelegate)
 	{
 		if (this.passwordEntryDelegate != null) {
-			// TODO: throw here? not meant to be caught... fatalError would be better
-			assert(false) // "setPasswordEntryDelegate called but this.passwordEntryDelegate already exists"
-			return
+			throw AssertionError("setPasswordEntryDelegate called but this.passwordEntryDelegate already exists") // fatal
 		}
 		this.passwordEntryDelegate = to_delegate
 	}
 	fun clearPasswordEntryDelegate(from_existingDelegate: PasswordEntryDelegate)
 	{
 		if (this.passwordEntryDelegate == null) {
-			// TODO: throw here? not meant to be caught... fatalError would be better
-			assert(false) // "clearPasswordEntryDelegate called but no passwordEntryDelegate exists"
-			return
+			throw AssertionError("clearPasswordEntryDelegate called but no passwordEntryDelegate exists") // fatal
 		}
 		if (isEqual(this.passwordEntryDelegate!!, from_existingDelegate) == false) {
-			// TODO: throw here? not meant to be caught... fatalError would be better
-			assert(false) // "clearPasswordEntryDelegate called but passwordEntryDelegate does not match"
+			// fatal
+			throw AssertionError("clearPasswordEntryDelegate called but passwordEntryDelegate does not match")
 			return
 		}
 		this.passwordEntryDelegate = null
@@ -262,24 +257,24 @@ object PasswordController: PasswordProvider
 	fun startObserving_userIdle()
 	{
 		// TODO:
-//		NotificationCenter.default.addObserver(self, selector: #selector(UserIdle_userDidBecomeIdle), name: UserIdle.NotificationNames.userDidBecomeIdle.notificationName, object: null)
+//		NotificationCenter.default.addObserver(this, selector: #selector(UserIdle_userDidBecomeIdle), name: UserIdle.NotificationNames.userDidBecomeIdle.notificationName, object: null)
 	}
 	fun initializeRuntimeAndBoot()
 	{
-		assert(this.hasBooted == false) // "\(#function) called while already booted"
+		if (this.hasBooted == true) { // fatal
+			throw AssertionError("initializeRuntimeAndBoot called while already booted")
+		}
 		val (err_str, documentContentStrings) = DocumentPersister.AllDocuments(
 			collectionName = this.collectionName
 		)
 		if (err_str != null) {
-			Log.e("Passwords", "Fatal error while loading ${this.collectionName}: ${err_str!!}")
-			assert(false) // TODO: fatalError?
-			return
+			val errorDescription = "Fatal error while loading ${this.collectionName}: ${err_str!!}"
+			Log.e("Passwords", errorDescription)
+			throw AssertionError(errorDescription)
 		}
 		val documentContentStrings_count = documentContentStrings!!.count()
 		if (documentContentStrings_count  > 1) {
-			Log.e("Passwords", "Unexpected state while loading ${this.collectionName}: more than one saved doc.")
-			assert(false)
-			return
+			throw AssertionError("Unexpected state while loading ${this.collectionName}: more than one saved doc.")
 		}
 		fun _proceedTo_load(documentJSON: DocumentJSON)
 		{
@@ -293,15 +288,14 @@ object PasswordController: PasswordProvider
 					// ^-- but it was saved w/o an encrypted challenge str
 					// TODO: not sure how to handle this case. delete all local info? would suck but otoh when would this happen if not for a cracking attempt, some odd/fatal code fault, or a known migration?
 					val err_str = "Found undefined encrypted msg for unlock challenge in saved password model document"
-					Log.e("Passwords", "${err_str}")
-					// TODO: fatalError
-					return
+					Log.e("Passwords", err_str)
+					throw AssertionError(err_str)
 				}
 			}
 			//
 			this.hasBooted = true
 			this._callAndFlushAllBlocksWaitingForBootToExecute()
-//			Log.d("Passwords", "Booted \(self) and called all waiting blocks. Waiting for unlock.")
+//			Log.d("Passwords", "Booted \(this) and called all waiting blocks. Waiting for unlock.")
 		}
 		if (documentContentStrings_count == 0) {
 			val fabricated_documentJSON = mutableMapOf<String, Any>()
@@ -355,7 +349,9 @@ object PasswordController: PasswordProvider
 		}
 		fun callBackHavingCanceled()
 		{
-			userCanceled_fn?.let { it() }
+			userCanceled_fn?.let {
+				it()
+			}
 		}
 		if (this.hasUserEnteredValidPasswordYet) {
 			callBackHavingObtainedPassword()
@@ -370,9 +366,9 @@ object PasswordController: PasswordProvider
 		fun ___guardAllCallBacks(): Boolean
 		{
 			if (hasCalledBack) {
-				Log.e("Passwords", "PasswordController/OnceBootedAndPasswordObtained hasCalledBack already true")
-				assert(false) // TODO: fatalError?
-				return false // ^- shouldn't happen but just in case…
+				val msg = "PasswordController/OnceBootedAndPasswordObtained hasCalledBack already true"
+				Log.e("Passwords", msg)
+				throw AssertionError(msg)
 			}
 			hasCalledBack = true
 			return true
@@ -447,10 +443,9 @@ object PasswordController: PasswordProvider
 			//
 			if (this.messageAsEncryptedDataForUnlockChallenge_base64String == null) {
 				val err_str = "Code fault: Existing document but no messageAsEncryptedDataForUnlockChallenge_base64String"
-				Log.e("Passwords", "${err_str}")
+				Log.e("Passwords", err_str)
 				this.unguard_getNewOrExistingPassword()
-				assert(false) // TODO: fatalError? err_str
-				return
+				throw AssertionError(err_str) // fatal
 			}
 			this._getUserToEnterTheirExistingPassword(
 				isForChangePassword = isForChangePassword,
@@ -543,7 +538,10 @@ object PasswordController: PasswordProvider
 			}
 			)
 		}
-		assert(isForChangePassword == false || isForAuthorizingAppActionOnly == false) // both shouldn't be true
+		if (isForChangePassword && isForAuthorizingAppActionOnly) {
+			// both shouldn't be true
+			throw AssertionError("Unexpected isForChangePassword && isForAuthorizingAppActionOnly")
+		}
 		// Now put request out
 		this.passwordEntryDelegate!!.getUserToEnterExistingPassword(
 			isForChangePassword = isForChangePassword,
@@ -630,8 +628,7 @@ object PasswordController: PasswordProvider
 					this.unguard_getNewOrExistingPassword()
 					val err_str = this.context.resources.getString(R.string.unrecognized_password_type)
 					this.erroredWhileSettingNewPassword_fns.invoke(this, err_str)
-					assert(false)
-					return@cb // exit to prevent fallthrough
+					throw AssertionError(err_str) // consider fatal
 				}
 				if (isForChangePassword) {
 					if (this.password == obtainedPasswordString) { // they are disallowed from using change pw to enter the same pw… despite that being convenient for dev ;)
@@ -644,7 +641,7 @@ object PasswordController: PasswordProvider
 							err_str = this.context.resources.getString(R.string.enter_fresh_pin)
 						} else {
 							err_str = this.context.resources.getString(R.string.unrecognized_password_type)
-							assert(false)
+							throw AssertionError(err_str) // considered fatal
 						}
 						this.erroredWhileSettingNewPassword_fns.invoke(this, err_str)
 						return@cb // bail
@@ -660,7 +657,9 @@ object PasswordController: PasswordProvider
 				val err_str = this.saveToDisk()
 				if (err_str != null) {
 					this.unguard_getNewOrExistingPassword()
-					assert(wasFirstSetOfPasswordAtRuntime == false || this.password == null)
+					if (wasFirstSetOfPasswordAtRuntime && this.password != null) { // is this correct?
+						throw AssertionError("Unexpected wasFirstSetOfPasswordAtRuntime && this.password != null")
+					}
 					this.password = old_password // they'll have to try again - and revert to old pw rather than null for changePassword (should be null for first pw set)
 					this.passwordType = old_passwordType
 					//
@@ -677,8 +676,8 @@ object PasswordController: PasswordProvider
 					return@cb // prevent fallthough
 				}
 				// then, it's a change password
-				val changePassword_err_orNil = this._tellRegistrants_doChangePassword() // returns error
-				if (changePassword_err_orNil == null) { // actual success - we can return early
+				val changePassword_err_orNull = this._tellRegistrants_doChangePassword() // returns error
+				if (changePassword_err_orNull == null) { // actual success - we can return early
 					this.unguard_getNewOrExistingPassword()
 					// specific emit
 					this.registrantsAllChangedPassword_fns.invoke(this, "")
@@ -691,20 +690,22 @@ object PasswordController: PasswordProvider
 				this.password = old_password // first revert, so consumers can read reverted value
 				this.passwordType = old_passwordType
 				//
-				val revert_save_errStr_orNil = this.saveToDisk()
-				if (revert_save_errStr_orNil != null) {
-					assert(false) // Couldn't saveToDisk to revert failed changePassword... in debug mode, treat this as fatal
+				val revert_save_errStr_orNull = this.saveToDisk()
+				if (revert_save_errStr_orNull != null) {
+					assert(false) // Couldn't saveToDisk to revert failed changePassword... in debug mode, trigger
+					// ^-- asserts aren't enabled in testing nor debug mode .. what can this be replaced with?
 				} else { // continue trying to revert
-					val revert_registrantsChangePw_err_orNil = this._tellRegistrants_doChangePassword() // this may well fail
-					if (revert_registrantsChangePw_err_orNil != null) {
+					val revert_registrantsChangePw_err_orNull = this._tellRegistrants_doChangePassword() // this may well fail
+					if (revert_registrantsChangePw_err_orNull != null) {
 						assert(false) // Some registrants couldn't revert failed changePassword; in debug mode, treat this as fatal
+						// ^-- asserts aren't enabled in testing nor debug mode .. what can this be replaced with?
 					} else {
 						// revert successful
 					}
 				}
 				// finally, notify of error while changing password
 				this.unguard_getNewOrExistingPassword() // important
-				this.erroredWhileSettingNewPassword_fns.invoke(this, changePassword_err_orNil) // the original changePassword_err_orNil
+				this.erroredWhileSettingNewPassword_fns.invoke(this, changePassword_err_orNull) // the original changePassword_err_orNull
 			}
 		)
 	}
@@ -794,8 +795,7 @@ object PasswordController: PasswordProvider
 			}
 		)
 		if (index == null) {
-			assert(false) // registrant is not registered
-			return false
+			throw AssertionError("Registrant is not registered")
 		}
 		Log.d("Passwords", "Removing registrant for 'ChangePassword': ${registrant}")
 		mutable_weakRefsTo_registrants.removeAt(index!!)
@@ -861,16 +861,14 @@ object PasswordController: PasswordProvider
 	{
 		this.onceBooted cb@{
 			if (this.hasUserEnteredValidPasswordYet == false) {
-//				let err_etr = "initiate_changePassword called but hasUserEnteredValidPasswordYet == false. This should be disallowed in the UI"
-				assert(false)
-				return@cb
+				val err_str = "initiate_changePassword called but hasUserEnteredValidPasswordYet == false. This should be disallowed in the UI"
+				throw AssertionError(err_str)
 			}
 			// guard
 			if (this.isAlreadyGettingExistingOrNewPWFromUser == true) {
-//				val err_str = "initiate_changePassword called but isAlreadyGettingExistingOrNewPWFromUser == true. This should be precluded in the UI"
-				assert(false)
-				// only need to wait for it to be obtained
-				return@cb
+				val err_str = "initiate_changePassword called but isAlreadyGettingExistingOrNewPWFromUser == true. This should be precluded in the UI"
+				throw AssertionError(err_str)
+				// though only need to wait for it to be obtained
 			}
 			this.guard_getNewOrExistingPassword()
 			//
@@ -879,13 +877,13 @@ object PasswordController: PasswordProvider
 			this._getUserToEnterTheirExistingPassword(
 				isForChangePassword = isForChangePassword,
 				isForAuthorizingAppActionOnly = false,
-				fn = cb2@{ didCancel_orNil, validationErr_orNil, entered_existingPassword ->
-					if (validationErr_orNil != null) { // takes precedence over cancel
+				fn = cb2@{ didCancel_orNull, validationErr_orNull, entered_existingPassword ->
+					if (validationErr_orNull != null) { // takes precedence over cancel
 						this.unguard_getNewOrExistingPassword()
-						this.errorWhileChangingPassword_fns.invoke(this, validationErr_orNil)
+						this.errorWhileChangingPassword_fns.invoke(this, validationErr_orNull)
 						return@cb2
 					}
-					if (didCancel_orNil == true) {
+					if (didCancel_orNull == true) {
 						this.unguard_getNewOrExistingPassword()
 						this.canceledWhileChangingPassword_fns.invoke(this, "")
 						return@cb2 // just silently exit after unguarding
@@ -912,8 +910,7 @@ object PasswordController: PasswordProvider
 		// maybe it should be moved, maybe not.
 		// And note we're assuming here the PW has been entered already.
 		if (this.hasUserSavedAPassword != true) {
-			assert(false) // "initiateDeleteEverything() called but hasUserSavedAPassword != true. This should be disallowed in the UI."
-			return
+			throw AssertionError("initiateDeleteEverything() called but hasUserSavedAPassword != true. This should be disallowed in the UI.")
 		}
 		this._deconstructBootedStateAndClearPassword(
 			isForADeleteEverything = true,
@@ -946,9 +943,8 @@ object PasswordController: PasswordProvider
 				if (err_str != null) {
 					Log.e("Passwords", "Error while deleting everything: ${err_str}")
 					this.didErrorWhileDeletingEverything_fns.invoke(this, err_str)
-					assert(false) // we do not actually expect this ever but it's useful to have the notification of it for unit testing
-					// TODO: actually just fatalError here so app can be relaunched and regain sane state
-					return@fn_cb
+					throw AssertionError("Errored while deleting everything. Restart app. Error: ${err_str}")
+					// just fatalError here so app can be relaunched and regain sane state
 				}
 				this.havingDeletedEverything_didDeconstructBootedStateAndClearPassword_fns.invoke(this, "")
 			}
@@ -999,6 +995,144 @@ object PasswordController: PasswordProvider
 				this.initializeRuntimeAndBoot() // now trigger a boot before we call cb (tho we could do it after - consumers will wait for boot)
 				//
 				fn(null)
+			}
+		)
+	}
+	//
+	// Runtime - Imperatives - Password verification
+	fun initiate_verifyUserAuthenticationForAction(
+		customNavigationBarTitle: String? = null,
+		canceled_fn: (() -> Unit)?, // NOTE: this compiles b/c optional closures are treated as @escaping
+		entryAttempt_succeeded_fn: (() -> Unit) // required
+	) {
+		this.onceBooted(
+			fn = cb@{
+				if (this.hasUserEnteredValidPasswordYet == false) {
+					val err_etr = "initiate_verifyUserAuthenticationForAction called but hasUserEnteredValidPasswordYet == false. This should be disallowed in the UI"
+					throw AssertionError(err_etr)
+//					return@cb
+				}
+				// guard
+				if (this.isAlreadyGettingExistingOrNewPWFromUser == true) {
+					val err_str = "initiate_changePassword called but isAlreadyGettingExistingOrNewPWFromUser == true. This should be precluded in the UI"
+					throw AssertionError(err_str)
+					// only need to wait for it to be obtained
+//					return@cb
+				}
+				this.guard_getNewOrExistingPassword()
+				//
+				// ^-- we're relying on having checked above that user has entered a valid pw already
+				fun _proceedTo_verifyVia_passphrase()
+				{
+					this._getUserToEnterTheirExistingPassword(
+						isForChangePassword = false,
+						isForAuthorizingAppActionOnly = true,
+						customNavigationBarTitle = customNavigationBarTitle,
+						fn = enterExisting_fn@{ didCancel_orNull, validationErr_orNull, entered_existingPassword ->
+							if (validationErr_orNull != null) { // takes precedence over cancel
+								this.unguard_getNewOrExistingPassword()
+								this.errorWhileAuthorizingForAppAction_fns.invoke(this, validationErr_orNull)
+								return@enterExisting_fn
+							}
+							if (didCancel_orNull == true) {
+								this.unguard_getNewOrExistingPassword()
+								//
+								// currently there's no need of a .canceledWhileAuthorizingForAppAction note post here
+								canceled_fn?.let { it() } // but must call cb
+								//
+								return@enterExisting_fn // just silently exit after unguarding
+							}
+							val isGoodEnteredPassword = this.withExistingPassword_isCorrect(
+								enteredPassword = entered_existingPassword!!
+							)
+							if (isGoodEnteredPassword == false) {
+								this.unguard_getNewOrExistingPassword()
+								val err_str = this.new_incorrectPasswordValidationErrorMessageString
+								this.errorWhileAuthorizingForAppAction_fns.invoke(this, err_str)
+								return@enterExisting_fn
+							}
+							//
+							this.unguard_getNewOrExistingPassword() // must be called
+							this.successfullyAuthenticatedForAppAction_fns.invoke(this, "") // this must be posted so the PresentationController can dismiss the entry modal
+							entryAttempt_succeeded_fn()
+						}
+					)
+				}
+/*				val tryBiometrics = SettingsController.shared.authentication__tryBiometric
+					// now see if we can use biometrics
+					if tryBiometrics == false {
+*/
+						_proceedTo_verifyVia_passphrase()
+/*
+						return // so we don't have to wrap the whole following branch in an if
+					}
+				if #available(iOS 8.0, macOS 10.12.1, *) {
+					func _handle(receivedLAError error: NSError)
+					{
+						val code = LAError.Code(rawValue: error.code)!
+						switch code {
+							case .biometryNotEnrolled, // this case, go straight to pw
+							.biometryNotAvailable, // straight to pw
+							.biometryLockout, // this case, because we want to present a fallback method plus the cancel button
+							.authenticationFailed, // is including this correct?
+							.passcodeNotSet, // go straight to pw?
+							.notInteractive,
+							.userFallback
+							:
+							_proceedTo_verifyVia_passphrase()
+							break
+							// compiler says these will never be executed, that a default won't either, /and/ that switch must be exhaustive. so, opted to just enumerate the cases here to retain compiler check for exhaustiveness
+							case .touchIDNotEnrolled,
+							.touchIDNotAvailable,
+							.touchIDLockout: // this case, because we want to present a fallback method plus the cancel button
+							_proceedTo_verifyVia_passphrase()
+							break
+							case .systemCancel,
+							.appCancel,
+							.userCancel:
+							this.unguard_getNewOrExistingPassword() // must be called at function terminus
+							canceled_fn?()
+							break
+							case .invalidContext: // error.. fatal?
+							fatalError("LAContext passed to this call has been previously invalidated.")
+							break
+						}
+					}
+					val laContext = LAContext()
+					val policy: LAPolicy = .deviceOwnerAuthenticationWithBiometrics
+					var authError: NSError?
+					if laContext.canEvaluatePolicy(policy, error: &authError) {
+					val reason_localizedString = NSLocalizedString(customNavigationBarTitle ?? "Authenticate to allow MyMonero to perform this action.", comment: "")
+					laContext.evaluatePolicy(policy, localizedReason: reason_localizedString)
+					{ [weak this] (success, evaluateError) in
+						guard val thisthis = this else {
+						return
+					}
+						func ___proceed()
+						{
+							if success {
+								thisthis.unguard_getNewOrExistingPassword() // must be called at function terminus
+								entryAttempt_succeeded_fn() // consider this an authentication
+							} else { // User did not authenticate successfully
+								_handle(receivedLAError: evaluateError! as NSError)
+							}
+						}
+						if Thread.isMainThread == false { // has a tendency to call back on a bg thread
+							DispatchQueue.main.async {
+								___proceed()
+							}
+						} else {
+							___proceed()
+						}
+					}
+				} else { // Could not evaluate policy
+					_handle(receivedLAError: authError!)
+					return
+				}
+				} else {
+					_proceedTo_verifyVia_passphrase()
+				}
+				*/
 			}
 		)
 	}

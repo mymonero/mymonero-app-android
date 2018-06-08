@@ -234,12 +234,12 @@ class ExampleInstrumentedTest {
 				passwordType: PasswordType?
 			) -> Unit
 		) {
-			assert(isForChangePassword == false)
-			assert(PasswordController.password == null && PasswordController.passwordType == null)
+			assertTrue(isForChangePassword == false)
+			assertTrue(PasswordController.password == null && PasswordController.passwordType == null)
 			//
 			val userInput = this.createNewUserInput
 			val passwordType = PasswordType.new_detectedFromPassword(userInput)
-			assert(passwordType == expectedPasswordType)
+			assertTrue(passwordType == expectedPasswordType)
 			//
 			enterNewPasswordAndType_cb(
 				false, // didn't cancel
@@ -256,8 +256,8 @@ class ExampleInstrumentedTest {
 				obtainedPasswordString: Password?
 			) -> Unit
 		) {
-			assert(isForChangePassword == false)
-			assert(PasswordController.password != null && PasswordController.passwordType != null)
+			assertTrue(isForChangePassword == false)
+			assertTrue(PasswordController.password != null && PasswordController.passwordType != null)
 			//
 			enterExistingPassword_cb(
 				false, // didn't cancel
@@ -388,6 +388,211 @@ class ExampleInstrumentedTest {
 		assertTrue("Wrong password entered was not picked up", didError)
 	}
 	//
+	object MockedPasswords_VerifyUserAuth_Correct_EntryDelegate: PasswordEntryDelegate
+	{
+		val uuid = UUID.randomUUID().toString()
+		override fun identifier(): String {
+			return this.uuid
+		}
+		//
+		public override fun getUserToEnterNewPasswordAndType(
+			isForChangePassword: Boolean,
+			enterNewPasswordAndType_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?,
+				passwordType: PasswordType?
+			) -> Unit
+		) {
+			assertTrue("Unexpected getUserToEnterNewPassword on verify user auth", false) // Not expecting this - if the tester ran 'correct entry' first
+		}
+		override fun getUserToEnterExistingPassword(
+			isForChangePassword: Boolean,
+			isForAuthorizingAppActionOnly: Boolean,
+			customNavigationBarTitle: String?,
+			enterExistingPassword_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?
+			) -> Unit
+		) {
+			assertFalse(isForChangePassword)
+			//
+			enterExistingPassword_cb(
+				false, // didn't cancel
+				MockedPasswords_CorrectEntryDelegate.createNewUserInput
+			)
+		}
+	}
+	@Test fun mockedPasswords__verifyUserAuth_correctEntry()
+	{
+		PasswordController.setPasswordEntryDelegate(MockedPasswords_VerifyUserAuth_Correct_EntryDelegate) // for this test
+		//
+		var didError = false
+		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		//
+		val _Z = PasswordController.errorWhileAuthorizingForAppAction_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // not expecting this here
+			}
+		)
+		val _Y = PasswordController.successfullyAuthenticatedForAppAction_fns.startObserving(
+			{ emitter, dummy ->
+				// expecting this
+			}
+		)
+		//
+		var successfulAuthSeen = false
+		PasswordController.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				assertEquals("Unexpectedly different password after successful user auth", MockedPasswords_CorrectEntryDelegate.createNewUserInput, password)
+				PasswordController.initiate_verifyUserAuthenticationForAction(
+					customNavigationBarTitle = "Authenticate",
+					canceled_fn = {
+						assertTrue("Unexpected cancel during auth", false)
+					},
+					entryAttempt_succeeded_fn = {
+						successfulAuthSeen = true
+					}
+				)
+			},
+			userCanceled_fn = {
+				assertTrue(false) // not expecting that
+			}
+		)
+		//
+		// This may not be necessary but the above code may become asynchronous
+		Thread.sleep(50) // TODO: see if we can remove this
+		//
+		assertTrue("Successful auth not seen", successfulAuthSeen)
+	}
+	//
+	object MockedPasswords_VerifyUserAuth_Incorrect_EntryDelegate: PasswordEntryDelegate
+	{
+		var didEnter_incorrectEntryMethod = false
+		//
+		val uuid = UUID.randomUUID().toString()
+		override fun identifier(): String {
+			return this.uuid
+		}
+		//
+		public override fun getUserToEnterNewPasswordAndType(
+			isForChangePassword: Boolean,
+			enterNewPasswordAndType_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?,
+				passwordType: PasswordType?
+			) -> Unit
+		) {
+			assertTrue("Unexpected getUserToEnterNewPassword on verify user auth", false) // Not expecting this - if the tester ran 'correct entry' first
+		}
+		override fun getUserToEnterExistingPassword(
+			isForChangePassword: Boolean,
+			isForAuthorizingAppActionOnly: Boolean,
+			customNavigationBarTitle: String?,
+			enterExistingPassword_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?
+			) -> Unit
+		) {
+			assertFalse(isForChangePassword)
+			assertEquals("Authenticate", customNavigationBarTitle) // TODO: share string decl
+			//
+			didEnter_incorrectEntryMethod = true
+			//
+			enterExistingPassword_cb(
+				false, // didn't cancel
+				"some incorrect entry"
+			)
+		}
+	}
+	@Test fun mockedPasswords__verifyUserAuth_incorrectEntry()
+	{
+		PasswordController.setPasswordEntryDelegate(MockedPasswords_VerifyUserAuth_Correct_EntryDelegate) // for initial unlock
+		//
+		var didError = false
+		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue("Specifically not expecting to see this erroredWhileGettingExistingPassword_fns invocation on an incorrect user pw entry for authorization purposes!", false)
+			}
+		)
+		var didSeeErrorWhileAuthorizingForAppAction = false
+		val _Z = PasswordController.errorWhileAuthorizingForAppAction_fns.startObserving(
+			{ emitter, err_str ->
+				didSeeErrorWhileAuthorizingForAppAction = true
+			}
+		)
+		val _Y = PasswordController.successfullyAuthenticatedForAppAction_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected success during incorrect auth", false) // not expecting this here
+			}
+		)
+		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		//
+		var successfulAuthSeen = false
+		PasswordController.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				assertEquals("Unexpectedly different password after successful user auth", MockedPasswords_CorrectEntryDelegate.createNewUserInput, password)
+				//
+				// now switch over to this for incorrect entry:
+				PasswordController.clearPasswordEntryDelegate(MockedPasswords_VerifyUserAuth_Correct_EntryDelegate) // must first unset this or we will cause a runtime assertion exception
+				PasswordController.setPasswordEntryDelegate(MockedPasswords_VerifyUserAuth_Incorrect_EntryDelegate)
+				//
+				PasswordController.initiate_verifyUserAuthenticationForAction(
+					customNavigationBarTitle = "Authenticate",
+					canceled_fn = {
+						assertTrue("Unexpected cancel during auth", false)
+					},
+					entryAttempt_succeeded_fn = {
+						successfulAuthSeen = true
+						// could just assert false here
+					}
+				)
+			},
+			userCanceled_fn = {
+				assertTrue(false) // not expecting that
+			}
+		)
+		//
+		// This may not be necessary but the above code may become asynchronous
+		Thread.sleep(50) // TODO: see if we can remove this
+		//
+		assertTrue("Unexpectedly did not enter incorrect auth pw entry method", MockedPasswords_VerifyUserAuth_Incorrect_EntryDelegate.didEnter_incorrectEntryMethod)
+		assertFalse("Successful auth unexpectedly seen", successfulAuthSeen)
+		assertTrue("Unsuccessful auth not seen", didSeeErrorWhileAuthorizingForAppAction)
+	}
+	//
 	object MockedPasswords_ChangePasswordEntryDelegate: PasswordEntryDelegate
 	{
 		val uuid = UUID.randomUUID().toString()
@@ -437,7 +642,7 @@ class ExampleInstrumentedTest {
 
 			val userInput = this.changePasswordTo_userInput
 			val passwordType = PasswordType.new_detectedFromPassword(userInput)
-			assert(passwordType == MockedPasswords_CorrectEntryDelegate.expectedPasswordType)
+			assertTrue(passwordType == MockedPasswords_CorrectEntryDelegate.expectedPasswordType)
 
 			enterNewPasswordAndType_cb(
 				false,

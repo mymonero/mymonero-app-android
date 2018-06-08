@@ -105,7 +105,9 @@ object DocumentPersister {
 		if (err_str != null) {
 			return ErrorOr_DocumentIds(err_str, null)
 		}
-//		assert(fileDescriptions != null, "nil fileDescriptions")
+		if (fileDescriptions != null) {
+			throw AssertionError("nil fileDescriptions")
+		}
 		var ids = mutableListOf<DocumentId>()
 		val unwrapped_fileDescriptions = fileDescriptions as List<DocumentFileDescription>
 		for (fileDescription in unwrapped_fileDescriptions) {
