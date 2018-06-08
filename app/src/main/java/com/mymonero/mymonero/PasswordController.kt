@@ -947,6 +947,7 @@ object PasswordController: PasswordProvider
 					Log.e("Passwords", "Error while deleting everything: ${err_str}")
 					this.didErrorWhileDeletingEverything_fns.invoke(this, err_str)
 					assert(false) // we do not actually expect this ever but it's useful to have the notification of it for unit testing
+					// TODO: actually just fatalError here so app can be relaunched and regain sane state
 					return@fn_cb
 				}
 				this.havingDeletedEverything_didDeconstructBootedStateAndClearPassword_fns.invoke(this, "")
