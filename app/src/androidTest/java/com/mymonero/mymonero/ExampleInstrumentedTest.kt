@@ -237,7 +237,7 @@ class ExampleInstrumentedTest {
 			assert(isForChangePassword == false)
 			assert(PasswordController.password == null && PasswordController.passwordType == null)
 			//
-			val userInput =  createNewUserInput
+			val userInput = this.createNewUserInput
 			val passwordType = PasswordType.new_detectedFromPassword(userInput)
 			assert(passwordType == expectedPasswordType)
 			//
@@ -259,14 +259,54 @@ class ExampleInstrumentedTest {
 			assert(isForChangePassword == false)
 			assert(PasswordController.password != null && PasswordController.passwordType != null)
 			//
-			val userInput = getExistingUserInput
-			//
 			enterExistingPassword_cb(
 				false, // didn't cancel
-				userInput
+				this.getExistingUserInput
 			)
 		}
 	}
+	@Test fun mockedPasswords__correctEntry_getPassword_createIfNecessary()
+	{
+		PasswordController.setPasswordEntryDelegate(MockedPasswords_CorrectEntryDelegate) // for this test
+		//
+		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		//
+		PasswordController.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				Log.d(mockedPasswords__LogTag, "Obtained ${passwordType} from user ${password}")
+				//
+				assertTrue(PasswordController.password == password)
+				assertTrue(PasswordController.passwordType == passwordType)
+			},
+			userCanceled_fn = {
+				Log.d(mockedPasswords__LogTag, "User canceled pw input")
+				assertTrue(false) // not expecting this
+			}
+		)
+		//
+		// This should not be necessary but the above code may become asynchronous
+		Thread.sleep(50) // TODO: see if we can remove this
+	}
+	//
 	object MockedPasswords_IncorrectEntryDelegate: PasswordEntryDelegate
 	{
 		val uuid = UUID.randomUUID().toString()
@@ -284,7 +324,7 @@ class ExampleInstrumentedTest {
 				passwordType: PasswordType?
 			) -> Unit
 		) {
-			assert(false) // Not expecting this - if the tester ran 'correct entry' first
+			assertTrue(false) // Not expecting this - if the tester ran 'correct entry' first
 		}
 		override fun getUserToEnterExistingPassword(
 			isForChangePassword: Boolean,
@@ -295,57 +335,15 @@ class ExampleInstrumentedTest {
 				obtainedPasswordString: Password?
 			) -> Unit
 		) {
-			assert(isForChangePassword == false)
-			assert(PasswordController.password == MockedPasswords_CorrectEntryDelegate.createNewUserInput)
-			assert(PasswordController.passwordType == MockedPasswords_CorrectEntryDelegate.expectedPasswordType)
+			assertFalse(isForChangePassword)
+			assertTrue(PasswordController.password == null) // because we haven't entered it yet
+			assertTrue(PasswordController.passwordType == MockedPasswords_CorrectEntryDelegate.expectedPasswordType)
 			//
 			enterExistingPassword_cb(
 				false, // didn't cancel
 				this.userInput // feed incorrect password - and expect fail
 			)
 		}
-	}
-
-	@Test fun mockedPasswords__correctEntry_getPassword_createIfNecessary()
-	{
-		PasswordController.setPasswordEntryDelegate(MockedPasswords_CorrectEntryDelegate) // for this test
-		//
-		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
-			{ emitter, err_str ->
-				assert(false) // should never see this
-			}
-		)
-		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
-			{ emitter, err_str ->
-				assert(false) // should never see this
-			}
-		)
-		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
-			{ emitter, err_str ->
-				assert(false) // should never see this
-			}
-		)
-		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
-			{ emitter, err_str ->
-				assert(false) // should never see this
-			}
-		)
-		//
-		PasswordController.OnceBootedAndPasswordObtained(
-			fn = { password, passwordType ->
-				Log.d(mockedPasswords__LogTag, "Obtained ${passwordType} from user ${password}")
-
-				assert(PasswordController.password == password)
-				assert(PasswordController.passwordType == passwordType)
-			},
-			userCanceled_fn = {
-				Log.d(mockedPasswords__LogTag, "User canceled pw input")
-				assert(false) // not expecting this
-			}
-		)
-		//
-		// This should not be necessary but the above code may become asynchronous
-		Thread.sleep(50) // TODO: see if we can remove this
 	}
 	@Test fun mockedPasswords__incorrectEntry_getPassword()
 	{
@@ -354,38 +352,378 @@ class ExampleInstrumentedTest {
 		var didError = false
 		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
 			{ emitter, err_str ->
-				assert(false) // should never see this
+				assertTrue(err_str, false) // should never see this
 			}
 		)
 		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
 			{ emitter, err_str ->
 				didError = true
-				assertEquals(err_str, R.string.incorrect_password) // this may be too fragile but making it dynamic might make the test less useful
+				// we expect this case
+				assertEquals(err_str, "Incorrect password") // this may be too fragile but making it dynamic might make the test less useful
 			}
 		)
 		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
-			{ emitter, err_str ->
-				assert(false) // should never see this
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
 			}
 		)
 		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
-			{ emitter, err_str ->
-				assert(false) // should never see this
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
 			}
 		)
 		//
 		PasswordController.OnceBootedAndPasswordObtained(
 			fn = { password, passwordType ->
-				assert(false) // should never be allowed to get here with incorrect input
+				assertTrue(false) // should never be allowed to get here with incorrect input
 			},
 			userCanceled_fn = {
-				assert(false) // not expecting that
+				assertTrue(false) // not expecting that
 			}
 		)
 		//
 		// This may not be necessary but the above code may become asynchronous
-		Thread.sleep(500) // TODO: see if we can remove this
+		Thread.sleep(50) // TODO: see if we can remove this
 		//
 		assertTrue("Wrong password entered was not picked up", didError)
+	}
+	//
+	object MockedPasswords_ChangePasswordEntryDelegate: PasswordEntryDelegate
+	{
+		val uuid = UUID.randomUUID().toString()
+		val changePasswordTo_userInput = "a changed mock password"
+		//
+		override fun identifier(): String {
+			return this.uuid
+		}
+		//
+		override fun getUserToEnterExistingPassword(
+			isForChangePassword: Boolean,
+			isForAuthorizingAppActionOnly: Boolean,
+			customNavigationBarTitle: String?,
+			enterExistingPassword_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?
+			) -> Unit
+		) {
+			if (isForChangePassword) {
+				assertTrue("Expected pw to match initial correct entry on enter existing for change pw", PasswordController.password == MockedPasswords_CorrectEntryDelegate.createNewUserInput)
+				assertTrue("Expected pw type to match initial correct entry on enter existing for change pw", PasswordController.passwordType == MockedPasswords_CorrectEntryDelegate.expectedPasswordType)
+				//
+				enterExistingPassword_cb(
+					false, // didn't cancel
+					MockedPasswords_CorrectEntryDelegate.createNewUserInput // being asked to verify original password
+				)
+			} else {
+				assertTrue("Expected pw to be nil on entry that was not for change pw", PasswordController.password == null)
+				assertTrue("Expected pw type not to be nil on initial boot not for changing pw because one should have been saved", PasswordController.passwordType != null)
+				//
+				enterExistingPassword_cb(
+					false,
+					MockedPasswords_CorrectEntryDelegate.createNewUserInput // enter original password
+				)
+			}
+		}
+		public override fun getUserToEnterNewPasswordAndType(
+			isForChangePassword: Boolean,
+			enterNewPasswordAndType_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?,
+				passwordType: PasswordType?
+			) -> Unit
+		) {
+			assertTrue("Only expecting to be asked for new pw for change pw since one should be saved already", isForChangePassword)
+			assertTrue("Expected pw not to be nil on entering new password", PasswordController.password == MockedPasswords_CorrectEntryDelegate.createNewUserInput)
+
+			val userInput = this.changePasswordTo_userInput
+			val passwordType = PasswordType.new_detectedFromPassword(userInput)
+			assert(passwordType == MockedPasswords_CorrectEntryDelegate.expectedPasswordType)
+
+			enterNewPasswordAndType_cb(
+				false,
+				userInput,
+				passwordType
+			)
+		}
+	}
+	object MockedPasswords_ChangePasswordRegistrant_NoError: ChangePasswordRegistrant
+	{
+		var didEnter_registrant_changePasswordMethod = false
+		//
+		val uuid = UUID.randomUUID().toString()
+		override fun identifier(): String {
+			return uuid
+		}
+		override fun passwordController_ChangePassword(): String? {
+			didEnter_registrant_changePasswordMethod = true // assertTrue this later
+			return null
+		}
+	}
+	@Test fun mockedPasswords__changePassword()
+	{
+		PasswordController.setPasswordEntryDelegate(MockedPasswords_ChangePasswordEntryDelegate) // for this test
+		//
+		PasswordController.addRegistrantForChangePassword(MockedPasswords_ChangePasswordRegistrant_NoError)
+		//
+		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this - unless we're running this test after having already changed the password
+			}
+		)
+		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _5 = PasswordController.errorWhileChangingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _6 = PasswordController.canceledWhileChangingPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		//
+		var changePWFinished = false
+		PasswordController.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				assertEquals("On booting pw controller for change pw test, password was not MockedPasswords_CorrectEntryDelegate.createNewUserInput", MockedPasswords_CorrectEntryDelegate.createNewUserInput, password)
+				// now that booted, we can change pw
+				PasswordController.initiate_changePassword()
+				// and wait for errors, if any...
+				assertEquals("Changed password not as expected", MockedPasswords_ChangePasswordEntryDelegate.changePasswordTo_userInput, PasswordController.password)
+				Thread.sleep(5) // almost certain this is not necessary for waiting for any assert fails in the emitter listeners above
+				changePWFinished = true // probably not necessary here
+			},
+			userCanceled_fn = {
+				assertTrue(false) // not expecting that
+			}
+		)
+		//
+		// This may not be necessary but the above code may become asynchronous
+		Thread.sleep(50) // TODO: see if we can remove this
+		//
+// not useful:	assertTrue("Change password didn't finish - this shouldn't be reached before some other assert fails.", changePWFinished)
+		assertTrue("Unexpectedly never entered MockedPasswords_ChangePasswordRegistrant_NoError changePW function", MockedPasswords_ChangePasswordRegistrant_NoError.didEnter_registrant_changePasswordMethod)
+	}
+	//
+	object MockedPasswords_DeleteEverythingEntryDelegate: PasswordEntryDelegate
+	{
+		val uuid = UUID.randomUUID().toString()
+		//
+		override fun identifier(): String {
+			return this.uuid
+		}
+		//
+		override fun getUserToEnterExistingPassword(
+			isForChangePassword: Boolean,
+			isForAuthorizingAppActionOnly: Boolean,
+			customNavigationBarTitle: String?,
+			enterExistingPassword_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?
+			) -> Unit
+		) {
+			assertFalse("Unexpected isForChangePassword", isForChangePassword)
+			assertTrue("Expected pw to be nil on entry that was not for change pw", PasswordController.password == null)
+			assertTrue("Expected pw type not to be nil on initial boot not for changing pw because one should have been saved", PasswordController.passwordType != null)
+			//
+			enterExistingPassword_cb(
+				false,
+				MockedPasswords_ChangePasswordEntryDelegate.changePasswordTo_userInput // enter changed password
+			)
+		}
+		public override fun getUserToEnterNewPasswordAndType(
+			isForChangePassword: Boolean,
+			enterNewPasswordAndType_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?,
+				passwordType: PasswordType?
+			) -> Unit
+		) {
+			assertTrue("Unexpected call of getUserToEnterNewPasswordAndType", false)
+		}
+	}
+	object MockedPasswords_DeleteEverythingRegistrant_DidError: DeleteEverythingRegistrant
+	{
+		val errStr = "Some error while deleting everything"
+
+		val uuid = UUID.randomUUID().toString()
+		override fun identifier(): String {
+			return uuid
+		}
+		override fun passwordController_DeleteEverything(): String? {
+			return errStr // simulate error
+		}
+	}
+	@Test fun mockedPasswords__deleteEverything_didError()
+	{
+		PasswordController.setPasswordEntryDelegate(MockedPasswords_DeleteEverythingEntryDelegate) // for this test
+		//
+		PasswordController.addRegistrantForDeleteEverything(MockedPasswords_DeleteEverythingRegistrant_DidError)
+		// we must add this or the test will fail, b/c the delete everything will succeed
+		//
+		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this - unless we're running this test after having already changed the password
+			}
+		)
+		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _5 = PasswordController.errorWhileChangingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _6 = PasswordController.canceledWhileChangingPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _7 = PasswordController.havingDeletedEverything_didDeconstructBootedStateAndClearPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected success of deleteEverything in didError test", false)
+			}
+		)
+		var didSeeErrorDuringDeleteEverything = false
+		val _8 = PasswordController.didErrorWhileDeletingEverything_fns.startObserving(
+			{ emitter, err_str ->
+				// we expect this to fail here
+				assertEquals("err_str returned differs from the expected str", MockedPasswords_DeleteEverythingRegistrant_DidError.errStr, err_str)
+				didSeeErrorDuringDeleteEverything = true
+			}
+		)
+		//
+		var deleteEverythingFinished = false
+		PasswordController.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				assertEquals("On booting pw controller for delete everything test, password was not MockedPasswords_ChangePasswordEntryDelegate.changePasswordTo_userInput", MockedPasswords_ChangePasswordEntryDelegate.changePasswordTo_userInput, password)
+				// now that booted, we can change pw
+				PasswordController.initiate_deleteEverything()
+				// and wait for errors, if any...
+				Thread.sleep(5) // almost certain this is not necessary for waiting for any assert fails in the emitter listeners above
+				deleteEverythingFinished = true // we should basically just be able to assert false here
+				assertTrue("Delete everything unexpectedly finished without seeing error", didSeeErrorDuringDeleteEverything)
+			},
+			userCanceled_fn = {
+				assertTrue("Unexpected cancel", false) // not expecting that
+			}
+		)
+		//
+		// This may not be necessary but the above code may become asynchronous
+		Thread.sleep(50) // TODO: see if we can remove this
+		//
+		assertTrue("Unexpectedly didn't see error during intentional error deleteEverything", didSeeErrorDuringDeleteEverything)
+	}
+	object MockedPasswords_DeleteEverythingRegistrant_NoError: DeleteEverythingRegistrant
+	{
+		var didEnter_deleteEverything = false
+		//
+		val uuid = UUID.randomUUID().toString()
+		override fun identifier(): String {
+			return uuid
+		}
+		override fun passwordController_DeleteEverything(): String? {
+			didEnter_deleteEverything = true // assertTrue this later
+			return null // simulate no error
+		}
+	}
+	@Test fun mockedPasswords__deleteEverything_noError()
+	{
+		PasswordController.setPasswordEntryDelegate(MockedPasswords_DeleteEverythingEntryDelegate) // for this test
+		//
+		PasswordController.addRegistrantForDeleteEverything(MockedPasswords_DeleteEverythingRegistrant_NoError)
+		// add this rather than the didError one or the test will fail
+		//
+		val _1 = PasswordController.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _2 = PasswordController.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this - unless we're running this test after having already changed the password
+			}
+		)
+		val _3 = PasswordController.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _4 = PasswordController.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _5 = PasswordController.errorWhileChangingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		val _6 = PasswordController.canceledWhileChangingPassword_fns.startObserving(
+			{ emitter, dummy ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		var didSee_havingDeletedEverything = false
+		val _7 = PasswordController.havingDeletedEverything_didDeconstructBootedStateAndClearPassword_fns.startObserving(
+			{ emitter, dummy ->
+				didSee_havingDeletedEverything = true
+				assertEquals("Password still there after deleting everything", null, PasswordController.password)
+			}
+		)
+		val _8 = PasswordController.didErrorWhileDeletingEverything_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // we don't expect this to fail here
+			}
+		)
+		//
+		var deleteEverythingFinished = false
+		PasswordController.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				assertEquals("On booting pw controller for delete everything test, password was not MockedPasswords_ChangePasswordEntryDelegate.changePasswordTo_userInput", MockedPasswords_ChangePasswordEntryDelegate.changePasswordTo_userInput, password)
+				// now that booted, we can change pw
+				PasswordController.initiate_deleteEverything()
+				// and wait for errors, if any...
+				Thread.sleep(5) // almost certain this is not necessary for waiting for any assert fails in the emitter listeners above
+				deleteEverythingFinished = true // we should basically just be able to assert false here
+				assertTrue("Delete everything unexpectedly finished without seeing error", didSee_havingDeletedEverything)
+			},
+			userCanceled_fn = {
+				assertTrue("Unexpected cancel", false) // not expecting that
+			}
+		)
+		//
+		// This may not be necessary but the above code may become asynchronous
+		Thread.sleep(50) // TODO: see if we can remove this
+		//
+		assertTrue("Unexpectedly didn't finish deleteEverything", deleteEverythingFinished)
+		assertTrue("Unexpectedly didn't enter MockedPasswords_DeleteEverythingRegistrant_NoError change pw method", MockedPasswords_DeleteEverythingRegistrant_NoError.didEnter_deleteEverything)
+		assertTrue("Unexpectedly didn't see 'havingDeletedEverything...' event", didSee_havingDeletedEverything)
 	}
 }

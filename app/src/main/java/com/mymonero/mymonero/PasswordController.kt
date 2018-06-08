@@ -37,6 +37,7 @@ import android.util.Log
 import tgio.rncryptor.RNCryptorNative
 import java.util.Timer
 import kotlin.concurrent.schedule
+import java.lang.ref.WeakReference
 
 typealias Password = String
 
@@ -67,14 +68,45 @@ public enum class PasswordType(val rawValue: String)
 		}
 	}
 }
-
+//
 interface PasswordProvider
 { // you can use this type for dependency-injecting a PasswordController implementation; see PersistableObject
 	var password: Password?
 }
-
-
-interface PasswordEntryDelegate
+//
+interface PasswordControllerEventParticipant // abstract interface - implement with anoter interface
+{
+	fun identifier(): String // To support isEqual
+}
+fun isEqual(
+	l: PasswordControllerEventParticipant,
+	r: PasswordControllerEventParticipant
+): Boolean {
+	return l.identifier() == r.identifier()
+}
+class WeakRefTo_EventParticipant( // TODO: a class is slightly heavyweight for this - anything more like a struct?
+	var value: WeakReference<PasswordControllerEventParticipant>? = null
+) {} // use this to construct arrays of event participants w/o having to hold strong references to them
+fun isEqual(
+	l: WeakRefTo_EventParticipant,
+	r: WeakRefTo_EventParticipant
+): Boolean {
+	if (l.value == null && r.value == null) {
+		return true // null == null
+	} else if (l.value == null || r.value == null) {
+		return false // null != !null
+	}
+	val l_ref = l.value!!.get()
+	val r_ref = r.value!!.get()
+	if (l_ref == null && r_ref == null) {
+		return true // null == null
+	} else if (l_ref == null || r_ref == null) {
+		return false // null != !null
+	}
+	return l_ref!!.identifier() == r_ref!!.identifier()
+}
+//
+interface PasswordEntryDelegate: PasswordControllerEventParticipant
 {
 	fun getUserToEnterExistingPassword(
 		isForChangePassword: Boolean,
@@ -93,13 +125,15 @@ interface PasswordEntryDelegate
 			passwordType: PasswordType?
 		) -> Unit
 	)
-	//
-	// To support equals
-	fun identifier(): String
 }
-fun isEqual(l: PasswordEntryDelegate, r: PasswordEntryDelegate): Boolean
-{ // TODO: this may need to be ported somehow
-	return l.identifier() == r.identifier()
+interface ChangePasswordRegistrant: PasswordControllerEventParticipant
+{
+	// Implement this function to support change-password events as well as revert-from-failed-change-password
+	fun passwordController_ChangePassword(): String? // return err_str:String if error - it will abort and try to revert the changepassword process. at time of writing, this was able to be kept synchronous.
+}
+interface DeleteEverythingRegistrant: PasswordControllerEventParticipant
+{
+	fun passwordController_DeleteEverything(): String? // return err_str:String if error. at time of writing, this was able to be kept synchronous.
 }
 //
 object PasswordController: PasswordProvider
@@ -117,7 +151,7 @@ object PasswordController: PasswordProvider
 	//
 	// Interface - Properties - Events
 	val setFirstPasswordDuringThisRuntime_fns = EventEmitter<PasswordController, String>()
-	val changedPassword_fns = EventEmitter<PasswordController, String>()
+	val registrantsAllChangedPassword_fns = EventEmitter<PasswordController, String>() // not really used anymore - never use for critical things
 	//
 	val obtainedNewPassword_fns = EventEmitter<PasswordController, String>()
 	val obtainedCorrectExistingPassword_fns = EventEmitter<PasswordController, String>()
@@ -133,8 +167,9 @@ object PasswordController: PasswordProvider
 	val errorWhileAuthorizingForAppAction_fns = EventEmitter<PasswordController, String>()
 	val successfullyAuthenticatedForAppAction_fns = EventEmitter<PasswordController, String>()
 	//
-	val willDeconstructBootedStateAndClearPassword_fns = EventEmitter<PasswordController, String>()
+	val willDeconstructBootedStateAndClearPassword_fns = EventEmitter<PasswordController, Boolean>() // Boolean parameter is isForADeleteEverything
 	val didDeconstructBootedStateAndClearPassword_fns = EventEmitter<PasswordController, String>()
+	val didErrorWhileDeletingEverything_fns = EventEmitter<PasswordController, String>()
 	val havingDeletedEverything_didDeconstructBootedStateAndClearPassword_fns = EventEmitter<PasswordController, String>()
 	//
 	// Properties
@@ -162,7 +197,7 @@ object PasswordController: PasswordProvider
 		}
 	var messageAsEncryptedDataForUnlockChallenge_base64String: String? = null
 	var isAlreadyGettingExistingOrNewPWFromUser: Boolean? = null
-	private var passwordEntryDelegate: PasswordEntryDelegate? = null // someone in the app must set this by calling setPasswordEntryDelegate(to:)
+	private var passwordEntryDelegate: PasswordEntryDelegate? = null // someone in the app must set this by calling setPasswordEntryDelegate(to:); TODO: would we like this to be weak?
 	fun setPasswordEntryDelegate(to_delegate: PasswordEntryDelegate)
 	{
 		if (this.passwordEntryDelegate != null) {
@@ -186,6 +221,10 @@ object PasswordController: PasswordProvider
 		}
 		this.passwordEntryDelegate = null
 	}
+	//
+	// genericizing the member type on these does come with the downside of loosening type safety:
+	private var weakRefsTo_changePasswordRegistrants = mutableListOf<WeakRefTo_EventParticipant>()
+	private var weakRefsTo_deleteEverythingRegistrants = mutableListOf<WeakRefTo_EventParticipant>()
 	//
 	// Properties - Convenience
 	val context = MainApplication.applicationContext()
@@ -392,7 +431,7 @@ object PasswordController: PasswordProvider
 		if (this.isAlreadyGettingExistingOrNewPWFromUser == true) {
 			return // only need to wait for it to be obtained
 		}
-		this.isAlreadyGettingExistingOrNewPWFromUser = true
+		this.guard_getNewOrExistingPassword()
 		//
 		// we'll use this in a couple places
 		val isForChangePassword = false // this is simply for requesting to have the existing or a new password from the user
@@ -449,7 +488,7 @@ object PasswordController: PasswordProvider
 				}
 				// then it's correct
 				// hang onto pw and set state
-				this._didObtainPassword(obtainedPasswordString!!)
+				this.password = obtainedPasswordString!!
 				// all done
 				this.unguard_getNewOrExistingPassword()
 				//
@@ -459,6 +498,10 @@ object PasswordController: PasswordProvider
 	}
 	//
 	// Runtime - Imperatives - Private - Requesting password from user
+	fun guard_getNewOrExistingPassword()
+	{
+		this.isAlreadyGettingExistingOrNewPWFromUser = true
+	}
 	fun unguard_getNewOrExistingPassword()
 	{
 		this.isAlreadyGettingExistingOrNewPWFromUser = false
@@ -551,6 +594,10 @@ object PasswordController: PasswordProvider
 	fun obtainNewPasswordFromUser(isForChangePassword: Boolean)
 	{
 		val wasFirstSetOfPasswordAtRuntime = this.hasUserEnteredValidPasswordYet == false // it's ok if we derive this here instead of in obtainNewPasswordFromUser because this fn will only be called, if setting the pw for the first time, if we have not yet accepted a valid PW yet
+		// for possible revert:
+		val old_password = this.password // this may be undefined
+		val old_passwordType = this.passwordType
+		//
 		this.passwordEntryDelegate!!.getUserToEnterNewPasswordAndType(
 			isForChangePassword = isForChangePassword,
 			enterNewPasswordAndType_cb =
@@ -606,28 +653,58 @@ object PasswordController: PasswordProvider
 				//
 				// II. hang onto new pw, pw type, and state(s)
 				Log.d("Passwords", "Obtained ${userSelectedTypeOfPassword!!} ${obtainedPasswordString!!.length} chars long")
-				this._didObtainPassword(obtainedPasswordString!!)
+				this.password = obtainedPasswordString!!
 				this.passwordType = userSelectedTypeOfPassword!!
 				//
 				// III. finally, save doc (and unlock on success) so we know a pw has been entered once before
 				val err_str = this.saveToDisk()
 				if (err_str != null) {
 					this.unguard_getNewOrExistingPassword()
-					this.password = null // they'll have to try again
+					assert(wasFirstSetOfPasswordAtRuntime == false || this.password == null)
+					this.password = old_password // they'll have to try again - and revert to old pw rather than null for changePassword (should be null for first pw set)
+					this.passwordType = old_passwordType
 					//
 					this.erroredWhileSettingNewPassword_fns.invoke(this, err_str!!)
 					return@cb
 				}
-				this.unguard_getNewOrExistingPassword()
-				// detecting & emiting first set or change
+				// detecting & emiting first set or handling result of change saves
 				if (wasFirstSetOfPasswordAtRuntime) {
+					this.unguard_getNewOrExistingPassword()
+					// specific emit
 					this.setFirstPasswordDuringThisRuntime_fns.invoke(this, "")
-				} else {
-					this.changedPassword_fns.invoke(this, "")
-
+					// general purpose emit
+					this.obtainedNewPassword_fns.invoke(this, "")
+					return@cb // prevent fallthough
 				}
-				// general purpose emit
-				this.obtainedNewPassword_fns.invoke(this, "")
+				// then, it's a change password
+				val changePassword_err_orNil = this._tellRegistrants_doChangePassword() // returns error
+				if (changePassword_err_orNil == null) { // actual success - we can return early
+					this.unguard_getNewOrExistingPassword()
+					// specific emit
+					this.registrantsAllChangedPassword_fns.invoke(this, "")
+					// general purpose emit
+					this.obtainedNewPassword_fns.invoke(this, "")
+					//
+					return@cb
+				}
+				// try to revert save files to old password...
+				this.password = old_password // first revert, so consumers can read reverted value
+				this.passwordType = old_passwordType
+				//
+				val revert_save_errStr_orNil = this.saveToDisk()
+				if (revert_save_errStr_orNil != null) {
+					assert(false) // Couldn't saveToDisk to revert failed changePassword... in debug mode, treat this as fatal
+				} else { // continue trying to revert
+					val revert_registrantsChangePw_err_orNil = this._tellRegistrants_doChangePassword() // this may well fail
+					if (revert_registrantsChangePw_err_orNil != null) {
+						assert(false) // Some registrants couldn't revert failed changePassword; in debug mode, treat this as fatal
+					} else {
+						// revert successful
+					}
+				}
+				// finally, notify of error while changing password
+				this.unguard_getNewOrExistingPassword() // important
+				this.erroredWhileSettingNewPassword_fns.invoke(this, changePassword_err_orNil) // the original changePassword_err_orNil
 			}
 		)
 	}
@@ -663,9 +740,265 @@ object PasswordController: PasswordProvider
 		return err_str
 	}
 	//
-	// Delegation - Password
-	fun _didObtainPassword(password: Password)
+	// Imperatives - Coordinated Events - Registration
+	fun addRegistrantForChangePassword(registrant: ChangePasswordRegistrant)
 	{
-		this.password = password
+		this._addRegistrantTo(
+			registrant = registrant,
+			mutable_weakRefsTo_registrants = this.weakRefsTo_changePasswordRegistrants
+		)
+	}
+	fun removeRegistrantForChangePassword(registrant: ChangePasswordRegistrant)
+	{
+		this._removeRegistrantFrom(
+			registrant = registrant,
+			mutable_weakRefsTo_registrants = this.weakRefsTo_changePasswordRegistrants
+		)
+	}
+	fun addRegistrantForDeleteEverything(registrant: DeleteEverythingRegistrant)
+	{
+		this._addRegistrantTo(
+			registrant = registrant,
+			mutable_weakRefsTo_registrants = this.weakRefsTo_deleteEverythingRegistrants
+		)
+	}
+	fun removeRegistrantForDeleteEverything(registrant: DeleteEverythingRegistrant)
+	{
+		this._removeRegistrantFrom(
+			registrant = registrant,
+			mutable_weakRefsTo_registrants = this.weakRefsTo_deleteEverythingRegistrants
+		)
+	}
+	private fun _addRegistrantTo(
+		registrant: PasswordControllerEventParticipant,
+		mutable_weakRefsTo_registrants: MutableList<WeakRefTo_EventParticipant>
+	) {
+		mutable_weakRefsTo_registrants.add(
+			WeakRefTo_EventParticipant(value = WeakReference(registrant))
+		)
+	}
+	private fun _removeRegistrantFrom(
+		registrant: PasswordControllerEventParticipant,
+		mutable_weakRefsTo_registrants: MutableList<WeakRefTo_EventParticipant>
+	): Boolean {
+		var index: Int? = null
+		this._iterateRegistrants(
+			registrants = mutable_weakRefsTo_registrants,
+			fn = { this_index, this_registrant ->
+				if (isEqual(registrant, this_registrant)) {
+					index = this_index
+					false
+				} else {
+					true
+				}
+			}
+		)
+		if (index == null) {
+			assert(false) // registrant is not registered
+			return false
+		}
+		Log.d("Passwords", "Removing registrant for 'ChangePassword': ${registrant}")
+		mutable_weakRefsTo_registrants.removeAt(index!!)
+		return true
+	}
+	private fun _iterateRegistrants(
+		registrants: List<WeakRefTo_EventParticipant>,
+		fn: (this_index: Int, this_registrant: PasswordControllerEventParticipant) -> Boolean
+	) {
+		var index: Int? = null
+		for (this_index in registrants.indices) {
+			val this_weakRefTo_registrant = registrants[this_index]
+			if (this_weakRefTo_registrant.value == null) {
+				continue // skip - has dealloced somewhere (TODO: maybe remove from list?)
+			}
+			val this_registrant = this_weakRefTo_registrant.value!!.get()
+			if (this_registrant == null) {
+				continue // skip - has dealloced somewhere (TODO: maybe remove from list?)
+			}
+			val shouldNotBreak = fn(this_index, this_registrant)
+			if (shouldNotBreak == false) {
+				break
+			}
+		}
+	}
+	private fun _tellRegistrants_doDeleteEverything(): String? // first encountered err_str
+	{
+		var err_str: String? = null
+		this._iterateRegistrants(
+			registrants = this.weakRefsTo_deleteEverythingRegistrants,
+			fn = { this_index, this_registrant ->
+				val this__err_str = (this_registrant as DeleteEverythingRegistrant).passwordController_DeleteEverything()
+				if (this__err_str != null) {
+					err_str = this__err_str
+					false // break
+				} else {
+					true
+				}
+			}
+		)
+		return err_str
+	}
+	private fun _tellRegistrants_doChangePassword(): String? // err_str
+	{
+		var err_str: String? = null
+		this._iterateRegistrants(
+			registrants = this.weakRefsTo_changePasswordRegistrants,
+			fn = { this_index, this_registrant ->
+				val this__err_str = (this_registrant as ChangePasswordRegistrant).passwordController_ChangePassword()
+				if (this__err_str != null) {
+					err_str = this__err_str
+					false // break
+				} else {
+					true
+				}
+			}
+		)
+		return err_str
+	}
+	//
+	// Imperatives - Coordinated Events
+	fun initiate_changePassword()
+	{
+		this.onceBooted cb@{
+			if (this.hasUserEnteredValidPasswordYet == false) {
+//				let err_etr = "initiate_changePassword called but hasUserEnteredValidPasswordYet == false. This should be disallowed in the UI"
+				assert(false)
+				return@cb
+			}
+			// guard
+			if (this.isAlreadyGettingExistingOrNewPWFromUser == true) {
+//				val err_str = "initiate_changePassword called but isAlreadyGettingExistingOrNewPWFromUser == true. This should be precluded in the UI"
+				assert(false)
+				// only need to wait for it to be obtained
+				return@cb
+			}
+			this.guard_getNewOrExistingPassword()
+			//
+			// ^-- we're relying on having checked above that user has entered a valid pw already
+			val isForChangePassword = true // we'll use this in a couple places
+			this._getUserToEnterTheirExistingPassword(
+				isForChangePassword = isForChangePassword,
+				isForAuthorizingAppActionOnly = false,
+				fn = cb2@{ didCancel_orNil, validationErr_orNil, entered_existingPassword ->
+					if (validationErr_orNil != null) { // takes precedence over cancel
+						this.unguard_getNewOrExistingPassword()
+						this.errorWhileChangingPassword_fns.invoke(this, validationErr_orNil)
+						return@cb2
+					}
+					if (didCancel_orNil == true) {
+						this.unguard_getNewOrExistingPassword()
+						this.canceledWhileChangingPassword_fns.invoke(this, "")
+						return@cb2 // just silently exit after unguarding
+					}
+					val isGoodEnteredPassword = this.withExistingPassword_isCorrect(
+						enteredPassword = entered_existingPassword!!
+					)
+					if (isGoodEnteredPassword == false) {
+						this.unguard_getNewOrExistingPassword()
+						val err_str = this.new_incorrectPasswordValidationErrorMessageString
+						this.errorWhileChangingPassword_fns.invoke(this, err_str)
+						return@cb2
+					}
+					// passwords match checked as necessary, we can proceed
+					this.obtainNewPasswordFromUser(
+						isForChangePassword = isForChangePassword
+					)
+				}
+			)
+		}
+	}
+	fun initiate_deleteEverything()
+	{ // this is used as a central initiation/sync point for delete everything like user idle
+		// maybe it should be moved, maybe not.
+		// And note we're assuming here the PW has been entered already.
+		if (this.hasUserSavedAPassword != true) {
+			assert(false) // "initiateDeleteEverything() called but hasUserSavedAPassword != true. This should be disallowed in the UI."
+			return
+		}
+		this._deconstructBootedStateAndClearPassword(
+			isForADeleteEverything = true,
+			optl__hasFiredWill_fn = hasFiredWill_cb@{ cb ->
+				// reset state cause we're going all the way back to pre-boot
+				this.hasBooted = false // require this pw controller to boot
+				this.password = null // this is redundant but is here for clarity
+				this._id = null
+				this.messageAsEncryptedDataForUnlockChallenge_base64String = null
+				//
+				// first try to have registrants delete everything
+				val registrant__first_err_str = this._tellRegistrants_doDeleteEverything()
+				if (registrant__first_err_str != null) {
+					cb(registrant__first_err_str)
+					return@hasFiredWill_cb
+				}
+				//
+				// now we can go ahead and delete the pw record
+				val (err_str, _) = DocumentPersister.RemoveAllDocuments(collectionName = this.collectionName)
+				if (err_str != null) {
+					cb(err_str)
+					return@hasFiredWill_cb
+				}
+				Log.d("Passwords", "Deleted password record.")
+				//
+				this.initializeRuntimeAndBoot() // now trigger a boot before we call cb (tho we could do it after - consumers will wait for boot)
+				cb(null)
+			},
+			optl__fn = fn_cb@{ err_str ->
+				if (err_str != null) {
+					Log.e("Passwords", "Error while deleting everything: ${err_str}")
+					this.didErrorWhileDeletingEverything_fns.invoke(this, err_str)
+					assert(false) // we do not actually expect this ever but it's useful to have the notification of it for unit testing
+					return@fn_cb
+				}
+				this.havingDeletedEverything_didDeconstructBootedStateAndClearPassword_fns.invoke(this, "")
+			}
+		)
+	}
+	//
+	// Runtime - Imperatives - Boot-state deconstruction/teardown
+	fun _deconstructBootedStateAndClearPassword(
+		isForADeleteEverything: Boolean,
+		optl__hasFiredWill_fn: ((
+			cb: (err_str: String?) -> Unit
+		) -> Unit)?,
+		optl__fn: ((
+			err_str: String?
+		) -> Unit)?
+	) {
+		var hasFiredWill_fn: (cb: ((err_str: String?) -> Unit)) -> Unit
+		var fn: (err_str: String?) -> Unit
+		if (optl__hasFiredWill_fn != null) {
+			hasFiredWill_fn = optl__hasFiredWill_fn!!
+		} else {
+			hasFiredWill_fn = { cb -> cb(null) /* must call cb even in dummy fn */ }
+		}
+		if (optl__fn != null) {
+			fn = optl__fn!!
+		} else {
+			fn = { err_str -> }
+		}
+		//
+		// TODO:? do we need to cancel any waiting functions here? not sure it would be possible to have any (unless code fault)…… we'd only deconstruct the booted state and pop the enter pw screen here if we had already booted before - which means there shouldn't be such waiting functions - so maybe assert that here - which requires hanging onto those functions somehow
+		// indicate to consumers they should tear down and await the "did" event to re-request
+		this.willDeconstructBootedStateAndClearPassword_fns.invoke(this, isForADeleteEverything)
+		hasFiredWill_fn(
+			cb@{ err_str ->
+				if (err_str != null) {
+					fn(err_str)
+					return@cb
+				}
+				// trigger deconstruction of booted state and require password
+				this.password = null // clear pw in memory
+				this.hasBooted = false // require this pw controller to boot
+				this._id = null
+				this.messageAsEncryptedDataForUnlockChallenge_base64String = null
+				//
+				// we're not going to call WhenBootedAndPasswordObtained_PasswordAndType because consumers will call it for us after they tear down their booted state with the "will" event and try to boot/decrypt again when they get this "did" event
+				this.didDeconstructBootedStateAndClearPassword_fns.invoke(this, "")
+				//
+				this.initializeRuntimeAndBoot() // now trigger a boot before we call cb (tho we could do it after - consumers will wait for boot)
+				//
+				fn(null)
+			}
+		)
 	}
 }
