@@ -33,6 +33,7 @@
 //
 package com.mymonero.mymonero
 
+import android.content.Context
 import android.util.Log
 import junit.framework.Assert
 import tgio.rncryptor.RNCryptorNative
@@ -49,12 +50,12 @@ public enum class PasswordType(val rawValue: String)
 	//
 	var humanReadableString: String = this.rawValue // TODO: return localized
 	var capitalized_humanReadableString: String = this.humanReadableString.capitalize()
-	val invalidEntry_humanReadableString: String
-		get() {
-			val code = if (this == PIN) R.string.incorrect_PIN else R.string.incorrect_password
-			//
-			return PasswordController.context.resources.getString(code) // TODO: pass context by injection somehow?
-		}
+	fun invalidEntry_humanReadableString(context: Context): String
+	{
+		val code = if (this == PIN) R.string.incorrect_PIN else R.string.incorrect_password
+		//
+		return context.resources.getString(code)
+	}
 	//
 	companion object
 	{
@@ -137,11 +138,32 @@ interface DeleteEverythingRegistrant: PasswordControllerEventParticipant
 	fun passwordController_DeleteEverything(): String? // return err_str:String if error. at time of writing, this was able to be kept synchronous.
 }
 //
-object PasswordController: PasswordProvider
+class PasswordControllerInitParams(
+	context: Context,
+	userIdleController: UserIdleController
+) {
+	val context = context
+	val userIdleController = userIdleController
+}
+class PasswordController: PasswordProvider
 {
 	//
-	// Constants
-	val minPasswordLength = 6
+	// Class
+	companion object
+	{
+		val appInstance by lazy { ForApp.instance }
+		//
+		val minPasswordLength = 6
+	}
+	// Singleton - Application - Interal
+	private object ForApp {
+		val instance = PasswordController(
+			PasswordControllerInitParams(
+				context = MainApplication.applicationContext(),
+				userIdleController = UserIdleController.appInstance
+			)
+		)
+	}
 	//
 	enum class DictKey(val rawValue: String)
 	{
@@ -173,11 +195,17 @@ object PasswordController: PasswordProvider
 	val didErrorWhileDeletingEverything_fns = EventEmitter<PasswordController, String>()
 	val havingDeletedEverything_didDeconstructBootedStateAndClearPassword_fns = EventEmitter<PasswordController, String>()
 	//
-	// Properties
+	// Properties - Dependencies
+	val context: Context
+	val userIdleController: UserIdleController
+	//
+	// Properties - State
 	var hasBooted = false
+		private set
 	var _id: DocumentId? = null
+		private set
 	override var password: Password? = null
-	lateinit var passwordType: PasswordType // it will default to .password per init
+	var passwordType: PasswordType? = null // it will default to .password per init
 	val hasUserSavedAPassword: Boolean
 		get() { // this obviously has a file I/O hit, which is not optimal; alternatives are use sparingly or cache at appropriate locations
 			val (err_str, ids) = DocumentPersister.IdsOfAllDocuments(
@@ -221,17 +249,16 @@ object PasswordController: PasswordProvider
 	private var weakRefsTo_changePasswordRegistrants = mutableListOf<WeakRefTo_EventParticipant>()
 	private var weakRefsTo_deleteEverythingRegistrants = mutableListOf<WeakRefTo_EventParticipant>()
 	//
-	// Properties - Convenience
-	val context = MainApplication.applicationContext()
-	//
 	// Accessors - Runtime - Derived properties
 	val hasUserEnteredValidPasswordYet: Boolean
 		get() = this.password != null
 	val isUserChangingPassword: Boolean
 		get() = this.hasUserEnteredValidPasswordYet == true && this.isAlreadyGettingExistingOrNewPWFromUser == true
 
-	val new_incorrectPasswordValidationErrorMessageString: String
-		get() = this.passwordType.invalidEntry_humanReadableString
+	fun new_incorrectPasswordValidationErrorMessageString(context: Context): String
+	{
+		return this.passwordType!!.invalidEntry_humanReadableString(context)
+	}
 	//
 	// Accessors - Common
 	private fun withExistingPassword_isCorrect(enteredPassword: String): Boolean
@@ -245,8 +272,13 @@ object PasswordController: PasswordProvider
 	val collectionName = "PasswordMeta"
 	val plaintextMessageToSaveForUnlockChallenges = "this is just a string that we'll use for checking whether a given password can unlock an encrypted version of this very message"
 	//
-	// Internal - Lifecycle - Singleton Init
-	init {
+	// Internal - Lifecycle
+	constructor(
+		initParams: PasswordControllerInitParams
+	) {
+		this.context = initParams.context
+		this.userIdleController = initParams.userIdleController
+		//
 		this.setup()
 	}
 	fun setup()
@@ -256,8 +288,9 @@ object PasswordController: PasswordProvider
 	}
 	fun startObserving_userIdle()
 	{
-		// TODO:
-//		NotificationCenter.default.addObserver(this, selector: #selector(UserIdle_userDidBecomeIdle), name: UserIdle.NotificationNames.userDidBecomeIdle.notificationName, object: null)
+		this.userIdleController.userDidBecomeIdle_fns.startObserving({ emitter, dummy ->
+			this._userDidBecomeIdle()
+		})
 	}
 	fun initializeRuntimeAndBoot()
 	{
@@ -318,23 +351,27 @@ object PasswordController: PasswordProvider
 			fn()
 			return
 		}
-		if (this.__blocksWaitingForBootToExecute == null) {
-			this.__blocksWaitingForBootToExecute = mutableListOf<() -> Unit>()
+		synchronized(this.__blocksWaitingForBootToExecute) {
+			if (this.__blocksWaitingForBootToExecute == null) {
+				this.__blocksWaitingForBootToExecute = mutableListOf<() -> Unit>()
+			}
+			this.__blocksWaitingForBootToExecute.add(fn)
 		}
-		this.__blocksWaitingForBootToExecute.add(fn)
 	}
 	fun _callAndFlushAllBlocksWaitingForBootToExecute()
 	{
-		if (this.__blocksWaitingForBootToExecute == null) {
-			return
-		}
-		//
-		// could check list of blocks empty here but not a huge win
-		//
-		val blocks = mutableListOf<() -> Unit>()
-		this.__blocksWaitingForBootToExecute = mutableListOf<() -> Unit>() // flash so the old blocks get freed - and we can do this before calling the blocks
-		for (block in blocks) {
-			block()
+		synchronized(this.__blocksWaitingForBootToExecute) {
+			if (this.__blocksWaitingForBootToExecute == null) {
+				return
+			}
+			//
+			// could check list of blocks empty here but not a huge win
+			//
+			val blocks = mutableListOf<() -> Unit>()
+			this.__blocksWaitingForBootToExecute = mutableListOf<() -> Unit>() // flash so the old blocks get freed - and we can do this before calling the blocks
+			for (block in blocks) {
+				block()
+			}
 		}
 	}
 	//
@@ -345,7 +382,7 @@ object PasswordController: PasswordProvider
 	) {
 		fun callBackHavingObtainedPassword()
 		{
-			fn(this.password!!, this.passwordType)
+			fn(this.password!!, this.passwordType!!)
 		}
 		fun callBackHavingCanceled()
 		{
@@ -471,13 +508,13 @@ object PasswordController: PasswordProvider
 				} catch (e: Exception) {
 					this.unguard_getNewOrExistingPassword()
 					Log.e("Passwords", "Error while decrypting message for unlock challenge: ${e} ${e.localizedMessage}")
-					val err_str = this.new_incorrectPasswordValidationErrorMessageString
+					val err_str = this.new_incorrectPasswordValidationErrorMessageString(this.context)
 					this.erroredWhileGettingExistingPassword_fns.invoke(this, err_str)
 					return@cb
 				}
 				if (plaintextString != this.plaintextMessageToSaveForUnlockChallenges) {
 					this.unguard_getNewOrExistingPassword()
-					val err_str = this.new_incorrectPasswordValidationErrorMessageString
+					val err_str = this.new_incorrectPasswordValidationErrorMessageString(this.context)
 					this.erroredWhileGettingExistingPassword_fns.invoke(this, err_str)
 					return@cb
 				}
@@ -525,9 +562,9 @@ object PasswordController: PasswordProvider
 				_unlockTimer = null // not strictly necessary
 			}
 			val unlockInT_s: Long = 10 // allows them to try again every T sec, but resets timer if they submit w/o waiting
-			Log.d("Passwords", "Too many password entry attempts within ${unlockInT_s}s. ${if (!wasAlreadyLockedOut) "Locking out" else "Extending lockout."}.")
-			_unlockTimer = Timer("unlockTimer", false)
-			_unlockTimer!!.schedule(delay = unlockInT_s, action = {
+			Log.d("Passwords", "\uD83D\uDEAB  Too many password entry attempts within ${unlockInT_s}s. ${if (!wasAlreadyLockedOut) "Locking out" else "Extending lockout."}.")
+			_unlockTimer = Timer("unlockTimer", true)
+			_unlockTimer!!.schedule(delay = 1000*unlockInT_s, action = {
 				Log.d("Passwords", "⭕️  Unlocking password entry.")
 				_unlockTimer!!.cancel() // stop and terminate timer thread .. probably necessary every time we're done with the timer
 				_unlockTimer!!.purge()
@@ -535,8 +572,7 @@ object PasswordController: PasswordProvider
 
 				_isCurrentlyLockedOut = false
 				fn(null, "", null) // this is _sort_ of a hack and should be made more explicit in API but I'm sending an empty string, and not even an err_str, to clear the validation error so the user knows to try again
-			}
-			)
+			})
 		}
 		if (isForChangePassword && isForAuthorizingAppActionOnly) {
 			// both shouldn't be true
@@ -548,6 +584,7 @@ object PasswordController: PasswordProvider
 			isForAuthorizingAppActionOnly = isForAuthorizingAppActionOnly,
 			customNavigationBarTitle = customNavigationBarTitle
 		) { didCancel_orNull, obtainedPasswordString ->
+			Log.d("Passwords", "🐸  returned with pw on thread id: ${Thread.currentThread().id}")
 			var validationErr_orNull: String? = null // so far…
 			if (didCancel_orNull != true) { // so user did NOT cancel
 				// user did not cancel… let's check if we need to send back a pre-emptive validation err (such as because they're trying too much)
@@ -725,7 +762,7 @@ object PasswordController: PasswordProvider
 		}
 		val persistableDocument = mapOf<String, Any>(
 			DictKey._id.rawValue to this._id!!,
-			DictKey.passwordType.rawValue to this.passwordType.rawValue,
+			DictKey.passwordType.rawValue to this.passwordType!!.rawValue,
 			DictKey.messageAsEncryptedDataForUnlockChallenge_base64String.rawValue to this.messageAsEncryptedDataForUnlockChallenge_base64String!!
 		)
 		val documentFileString = PersistableObject.new_plaintextJSONStringFromDocumentDict(persistableDocument)
@@ -774,31 +811,35 @@ object PasswordController: PasswordProvider
 		registrant: PasswordControllerEventParticipant,
 		mutable_weakRefsTo_registrants: MutableList<WeakRefTo_EventParticipant>
 	) {
-		mutable_weakRefsTo_registrants.add(
-			WeakRefTo_EventParticipant(value = WeakReference(registrant))
-		)
+		synchronized(mutable_weakRefsTo_registrants) {
+			mutable_weakRefsTo_registrants.add(
+				WeakRefTo_EventParticipant(value = WeakReference(registrant))
+			)
+		}
 	}
 	private fun _removeRegistrantFrom(
 		registrant: PasswordControllerEventParticipant,
 		mutable_weakRefsTo_registrants: MutableList<WeakRefTo_EventParticipant>
 	): Boolean {
-		var index: Int? = null
-		this._iterateRegistrants(
-			registrants = mutable_weakRefsTo_registrants,
-			fn = { this_index, this_registrant ->
-				if (isEqual(registrant, this_registrant)) {
-					index = this_index
-					false
-				} else {
-					true
+		synchronized(mutable_weakRefsTo_registrants) {
+			var index: Int? = null
+			this._iterateRegistrants(
+				registrants = mutable_weakRefsTo_registrants,
+				fn = { this_index, this_registrant ->
+					if (isEqual(registrant, this_registrant)) {
+						index = this_index
+						false
+					} else {
+						true
+					}
 				}
+			)
+			if (index == null) {
+				throw AssertionError("Registrant is not registered")
 			}
-		)
-		if (index == null) {
-			throw AssertionError("Registrant is not registered")
+			Log.d("Passwords", "Removing registrant for 'ChangePassword': ${registrant}")
+			mutable_weakRefsTo_registrants.removeAt(index!!)
 		}
-		Log.d("Passwords", "Removing registrant for 'ChangePassword': ${registrant}")
-		mutable_weakRefsTo_registrants.removeAt(index!!)
 		return true
 	}
 	private fun _iterateRegistrants(
@@ -824,35 +865,39 @@ object PasswordController: PasswordProvider
 	private fun _tellRegistrants_doDeleteEverything(): String? // first encountered err_str
 	{
 		var err_str: String? = null
-		this._iterateRegistrants(
-			registrants = this.weakRefsTo_deleteEverythingRegistrants,
-			fn = { this_index, this_registrant ->
-				val this__err_str = (this_registrant as DeleteEverythingRegistrant).passwordController_DeleteEverything()
-				if (this__err_str != null) {
-					err_str = this__err_str
-					false // break
-				} else {
-					true
+		synchronized(this.weakRefsTo_deleteEverythingRegistrants) {
+			this._iterateRegistrants(
+				registrants = this.weakRefsTo_deleteEverythingRegistrants,
+				fn = { this_index, this_registrant ->
+					val this__err_str = (this_registrant as DeleteEverythingRegistrant).passwordController_DeleteEverything()
+					if (this__err_str != null) {
+						err_str = this__err_str
+						false // break
+					} else {
+						true
+					}
 				}
-			}
-		)
+			)
+		}
 		return err_str
 	}
 	private fun _tellRegistrants_doChangePassword(): String? // err_str
 	{
 		var err_str: String? = null
-		this._iterateRegistrants(
-			registrants = this.weakRefsTo_changePasswordRegistrants,
-			fn = { this_index, this_registrant ->
-				val this__err_str = (this_registrant as ChangePasswordRegistrant).passwordController_ChangePassword()
-				if (this__err_str != null) {
-					err_str = this__err_str
-					false // break
-				} else {
-					true
+		synchronized(this.weakRefsTo_changePasswordRegistrants) {
+			this._iterateRegistrants(
+				registrants = this.weakRefsTo_changePasswordRegistrants,
+				fn = { this_index, this_registrant ->
+					val this__err_str = (this_registrant as ChangePasswordRegistrant).passwordController_ChangePassword()
+					if (this__err_str != null) {
+						err_str = this__err_str
+						false // break
+					} else {
+						true
+					}
 				}
-			}
-		)
+			)
+		}
 		return err_str
 	}
 	//
@@ -893,7 +938,7 @@ object PasswordController: PasswordProvider
 					)
 					if (isGoodEnteredPassword == false) {
 						this.unguard_getNewOrExistingPassword()
-						val err_str = this.new_incorrectPasswordValidationErrorMessageString
+						val err_str = this.new_incorrectPasswordValidationErrorMessageString(this.context)
 						this.errorWhileChangingPassword_fns.invoke(this, err_str)
 						return@cb2
 					}
@@ -1047,7 +1092,7 @@ object PasswordController: PasswordProvider
 							)
 							if (isGoodEnteredPassword == false) {
 								this.unguard_getNewOrExistingPassword()
-								val err_str = this.new_incorrectPasswordValidationErrorMessageString
+								val err_str = this.new_incorrectPasswordValidationErrorMessageString(this.context)
 								this.errorWhileAuthorizingForAppAction_fns.invoke(this, err_str)
 								return@enterExisting_fn
 							}
@@ -1134,6 +1179,26 @@ object PasswordController: PasswordProvider
 				}
 				*/
 			}
+		)
+	}
+	//
+	// Delegation - User Idle
+	fun _userDidBecomeIdle()
+	{
+		if (this.hasUserSavedAPassword == false) {
+			// nothing to do here because the app is not unlocked and/or has no data which would be locked
+			Log.d("Passwords", "User became idle but no password has ever been entered/no saved data should exist.")
+			return
+		} else if (this.hasUserEnteredValidPasswordYet == false) {
+			// user has saved data but hasn't unlocked the app yet
+			Log.d("Passwords", "User became idle and saved data/pw exists, but user hasn't unlocked app yet.")
+			return
+		}
+		// User having become idle -> teardown booted state and require pw
+		this._deconstructBootedStateAndClearPassword(
+			isForADeleteEverything = false,
+			optl__hasFiredWill_fn = null,
+			optl__fn = null
 		)
 	}
 }

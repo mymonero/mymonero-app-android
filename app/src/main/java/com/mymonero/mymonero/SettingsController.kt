@@ -1,5 +1,5 @@
 //
-//  DocumentPersister.kt
+//  SettingsController.kt
 //  MyMonero
 //
 //  Copyright (c) 2014-2018, MyMonero.com
@@ -30,44 +30,34 @@
 //  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-
+//
 package com.mymonero.mymonero
-
-import java.util.*
-
-typealias EventSubscriptionToken = String
-
-class EventEmitter<TS, TA> // TS: source; TA: arg
+//
+interface SettingsProvider {} // for specific domains
+interface IdleTimeoutAfterS_SettingsProvider
 {
-	companion object {
-		private fun new_subscriptionToken(): EventSubscriptionToken = UUID.randomUUID().toString() // hopefully this isn't too slow
-	}
-	private val invocationMap = mutableMapOf<EventSubscriptionToken, (TS,TA) -> Unit>()
 	//
-	// Interface
-	fun startObserving(m: (TS,TA) -> Unit): EventSubscriptionToken {
-		val token = EventEmitter.new_subscriptionToken()
-		synchronized(invocationMap) {
-			invocationMap[token] = m
-		}
-		//
-		return token
-	}
-	fun stopObserving(token: EventSubscriptionToken) {
-		synchronized(invocationMap) {
-			invocationMap.remove(token)
-		}
-	}
-	operator fun invoke(source: TS, arg: TA) {
-		// call by executing instance of this as if function
-		var existing_invocationMap: MutableMap<EventSubscriptionToken, (TS, TA) -> Unit>? = null
-		synchronized(invocationMap) { // TODO: is it alright to synchronize the read alone?
-			existing_invocationMap = invocationMap
-		}
-		for ((_, m) in existing_invocationMap!!) {
-			m(source, arg)
-		}
-	}
+	// Constants - Default values
+	val default_appTimeoutAfterS: Long
+	//
+	// Constants - Special states
+	val appTimeoutAfterS_neverValue: Long// = -1
+	//
+	// Properties
+	var appTimeoutAfterS_nullForDefault_orNeverValue: Long?
 }
 //
-object Events {}
+object SettingsController: IdleTimeoutAfterS_SettingsProvider
+{
+	//
+	// Constants - Default values
+	override val default_appTimeoutAfterS: Long = 90 // s …… 30 was a bit short for new users
+	//
+	// Constants - Special states
+	override val appTimeoutAfterS_neverValue: Long = -1 // would preferably declare this in the SettingsProvider interface
+	//
+	// Properties
+	override var appTimeoutAfterS_nullForDefault_orNeverValue: Long? = null
+	//
+	// Lifecycle - Init
+}

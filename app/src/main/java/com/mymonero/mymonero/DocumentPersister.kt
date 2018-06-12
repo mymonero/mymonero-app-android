@@ -60,7 +60,8 @@ data class DocumentFileDescription(
 	val new_filename: String
 		get() = "${this.new_fileKey}.${DocumentFileDescription.filenameExt}"
 }
-object DocumentPersister {
+object DocumentPersister
+{
 	//
 	// Interface - Accessory classes - Method return values
 	data class ErrorOr_DocumentFileDescriptions(
@@ -105,7 +106,7 @@ object DocumentPersister {
 		if (err_str != null) {
 			return ErrorOr_DocumentIds(err_str, null)
 		}
-		if (fileDescriptions != null) {
+		if (fileDescriptions == null) {
 			throw AssertionError("nil fileDescriptions")
 		}
 		var ids = mutableListOf<DocumentId>()
