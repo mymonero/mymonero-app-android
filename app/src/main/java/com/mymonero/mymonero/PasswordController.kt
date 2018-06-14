@@ -39,6 +39,9 @@ import kotlinx.coroutines.experimental.*
 import java.util.Timer
 import kotlin.concurrent.schedule
 import java.lang.ref.WeakReference
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 typealias Password = String
 
@@ -153,6 +156,7 @@ class PasswordController: PasswordProvider
 		val appInstance by lazy { ForApp.instance }
 		//
 		val minPasswordLength = 6
+		val maxLegal_numberOfTriesDuringThisTimePeriod = 5
 	}
 	// Singleton - Application - Interal
 	private object ForApp {
@@ -617,6 +621,7 @@ class PasswordController: PasswordProvider
 	{
 		this.isAlreadyGettingExistingOrNewPWFromUser = false
 	}
+	//
 	private fun _inThread_getUserToEnterTheirExistingPassword(
 		isForChangePassword: Boolean,
 		isForAuthorizingAppActionOnly: Boolean,
@@ -628,30 +633,38 @@ class PasswordController: PasswordProvider
 		) -> Unit
 	) {
 		var _isCurrentlyLockedOut: Boolean = false
-		var _unlockTimer: Timer? = null
+		var _unlockTimer_executor: ScheduledThreadPoolExecutor? = null
+		var _unlockTimer_scheduledFuture: ScheduledFuture<*>? = null
 		var _numberOfTriesDuringThisTimePeriod: Int = 0
 		var _dateOf_firstPWTryDuringThisTimePeriod: Long? = System.currentTimeMillis() // initialized to current time
 		fun __cancelAnyAndRebuildUnlockTimer()
 		{
-			val wasAlreadyLockedOut = _unlockTimer != null
-			if (_unlockTimer != null) {
+			val wasAlreadyLockedOut = _unlockTimer_executor != null || _unlockTimer_scheduledFuture != null
+			if (_unlockTimer_scheduledFuture != null) {
 				// Log.d("Passwords", "clearing existing unlock timer")
-				_unlockTimer!!.cancel() // stop and terminate timer thread .. probably necessary every time we're done with the timer
-				_unlockTimer!!.purge()
-				_unlockTimer = null // not strictly necessary
+				_unlockTimer_scheduledFuture!!.cancel(true) // stop and terminate timer thread .. probably necessary every time we're done with the timer
+				_unlockTimer_scheduledFuture = null // not strictly necessary
 			}
 			val unlockInT_s: Long = 10 // allows them to try again every T sec, but resets timer if they submit w/o waiting
 			Log.d("Passwords", "\uD83D\uDEAB  Too many password entry attempts within ${unlockInT_s}s. ${if (!wasAlreadyLockedOut) "Locking out" else "Extending lockout."}.")
-			_unlockTimer = Timer("unlockTimer", true)
-			_unlockTimer!!.schedule(delay = 1000*unlockInT_s, action = {
+			if (_unlockTimer_executor == null) {
+				_unlockTimer_executor = ScheduledThreadPoolExecutor(1)
+			}
+			val runnable = Runnable() {
 				Log.d("Passwords", "⭕️  Unlocking password entry.")
-				_unlockTimer!!.cancel() // stop and terminate timer thread .. probably necessary every time we're done with the timer
-				_unlockTimer!!.purge()
-				_unlockTimer = null // ok to modify this inside the block? retain cycle?
-
+				_unlockTimer_scheduledFuture!!.cancel(true) // stop and terminate timer thread .. probably necessary every time we're done with the timer
+				_unlockTimer_scheduledFuture = null // ok to modify this inside the block? retain cycle?
+				_unlockTimer_executor!!.shutdown() // and must be sure to shut this down too
+				_unlockTimer_executor = null
+				//
 				_isCurrentlyLockedOut = false
 				fn(null, "", null) // this is _sort_ of a hack and should be made more explicit in API but I'm sending an empty string, and not even an err_str, to clear the validation error so the user knows to try again
-			})
+			}
+			_unlockTimer_scheduledFuture = _unlockTimer_executor!!.schedule(
+				runnable,
+				unlockInT_s,
+				TimeUnit.SECONDS
+			)
 		}
 		if (isForChangePassword && isForAuthorizingAppActionOnly) {
 			// both shouldn't be true
@@ -672,16 +685,15 @@ class PasswordController: PasswordProvider
 							_dateOf_firstPWTryDuringThisTimePeriod = System.currentTimeMillis()
 						}
 						_numberOfTriesDuringThisTimePeriod += 1
-						val maxLegal_numberOfTriesDuringThisTimePeriod = 5
-						if (_numberOfTriesDuringThisTimePeriod > maxLegal_numberOfTriesDuringThisTimePeriod) { // rhs must be > 0
+						if (_numberOfTriesDuringThisTimePeriod > PasswordController.maxLegal_numberOfTriesDuringThisTimePeriod) { // rhs must be > 0
 							_numberOfTriesDuringThisTimePeriod = 0
 							// ^- no matter what, we're going to need to reset the above state for the next 'time period'
 							//
-							val s_since_firstPWTryDuringThisTimePeriod = System.currentTimeMillis() - _dateOf_firstPWTryDuringThisTimePeriod!!
-							val noMoreThanNTriesWithin_s = 30
-							if (s_since_firstPWTryDuringThisTimePeriod > noMoreThanNTriesWithin_s) { // enough time has passed since this group began - only reset the "time period" with tries->0 and val this pass through as valid check
+							val ms_since_firstPWTryDuringThisTimePeriod = System.currentTimeMillis() - _dateOf_firstPWTryDuringThisTimePeriod!!
+							val noMoreThanNTriesWithin_ms = 30 * 1000
+							if (ms_since_firstPWTryDuringThisTimePeriod > noMoreThanNTriesWithin_ms) { // enough time has passed since this group began - only reset the "time period" with tries->0 and val this pass through as valid check
 								_dateOf_firstPWTryDuringThisTimePeriod = null // not strictly necessary to do here as we reset the number of tries during this time period to zero just above
-								Log.d("Passwords", "There were more than ${maxLegal_numberOfTriesDuringThisTimePeriod} password entry attempts during this time period but the last attempt was more than ${noMoreThanNTriesWithin_s}s ago, so letting this go.")
+								Log.d("Passwords", "There were more than ${PasswordController.maxLegal_numberOfTriesDuringThisTimePeriod} password entry attempts during this time period but the last attempt was more than ${noMoreThanNTriesWithin_ms/1000}s ago, so letting this go.")
 							} else { // simply too many tries!…
 								// lock it out for the next time (supposing this try does not pass)
 								_isCurrentlyLockedOut = true

@@ -43,11 +43,15 @@ import org.junit.runner.RunWith
 import org.junit.Assert.*
 
 import android.util.Log
+import kotlinx.coroutines.experimental.async
+import kotlinx.coroutines.experimental.delay
+import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import org.junit.Assert
 import java.util.*
 
 import kotlin.concurrent.schedule
+import kotlin.concurrent.scheduleAtFixedRate
 
 /**
  * Instrumented test, which will execute on an Android device.
@@ -391,6 +395,114 @@ class ExampleInstrumentedTest {
 		Thread.sleep(50) // TODO: see if we can remove this
 		//
 		assertTrue("Wrong password entered was not picked up", didError)
+	}
+	//
+
+	object MockedPasswords_SpammingIncorrectEntryDelegate: PasswordEntryDelegate
+	{
+		val uuid = UUID.randomUUID().toString()
+		val userInput = "an INCORRECT mock password"
+		//
+		val spamTryInterval_ms: Long = 1000
+		//
+		override fun identifier(): String {
+			return this.uuid
+		}
+
+		public override fun getUserToEnterNewPasswordAndType(
+			isForChangePassword: Boolean,
+			enterNewPasswordAndType_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?,
+				passwordType: PasswordType?
+			) -> Unit
+		) {
+			assertTrue(false) // Not expecting this - if the tester ran 'correct entry' first
+		}
+
+		override fun getUserToEnterExistingPassword(
+			isForChangePassword: Boolean,
+			isForAuthorizingAppActionOnly: Boolean,
+			customNavigationBarTitle: String?,
+			enterExistingPassword_cb: (
+				didCancel_orNull: Boolean?,
+				obtainedPasswordString: Password?
+			) -> Unit
+		) {
+			assertFalse(isForChangePassword)
+			assertTrue(PasswordController.appInstance.password == null) // because we haven't entered it yet
+			assertTrue(PasswordController.appInstance.passwordType == MockedPasswords_CorrectEntryDelegate.expectedPasswordType)
+			//
+			val self = this
+			val timer = Timer("test", false)
+			var i = 0
+			timer.scheduleAtFixedRate(0, spamTryInterval_ms, {
+				Log.d("Test", "Doing ${i}th bad pw entry")
+				enterExistingPassword_cb(
+					false, // didn't cancel
+					self.userInput // feed incorrect password - and expect fail
+				)
+				i += 1
+				if (i == PasswordController.maxLegal_numberOfTriesDuringThisTimePeriod + 1) {
+					Log.d("Test", "Cleaning up timer")
+					timer.cancel()
+					timer.purge()
+				}
+			})
+		}
+	}
+	@Test fun mockedPasswords__spammingIncorrectEntry_getPassword()
+	{
+		assertTrue("Expected a password to have already been saved for this test", PasswordController.appInstance.hasUserSavedAPassword)
+		//
+		PasswordController.appInstance.setPasswordEntryDelegate(MockedPasswords_SpammingIncorrectEntryDelegate) // for this test
+		//
+		var didSeeLockOutAfterMaxTries = false
+		val _1 = PasswordController.appInstance.erroredWhileSettingNewPassword_fns.startObserving(
+			{ emitter, err_str ->
+				assertTrue(err_str, false) // should never see this
+			}
+		)
+		var numTriesFailed = 0
+		val _2 = PasswordController.appInstance.erroredWhileGettingExistingPassword_fns.startObserving(
+			{ emitter, err_str ->
+				numTriesFailed += 1
+//				Log.d("Test", "numTriesFailed ${numTriesFailed} err_str ${err_str}")
+				if (numTriesFailed >= PasswordController.maxLegal_numberOfTriesDuringThisTimePeriod + 1) {
+					didSeeLockOutAfterMaxTries = true
+					assertEquals(err_str, "As a security precaution, please wait a few moments before trying again.") // this string may be too fragile
+				} else {
+					assertEquals(err_str, "Incorrect password")
+				}
+			}
+		)
+		val _3 = PasswordController.appInstance.canceledWhileEnteringNewPassword_fns.startObserving(
+			{ emitter, _ ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		val _4 = PasswordController.appInstance.canceledWhileEnteringExistingPassword_fns.startObserving(
+			{ emitter, _ ->
+				assertTrue("Unexpected cancel", false) // should never see this
+			}
+		)
+		//
+		PasswordController.appInstance.OnceBootedAndPasswordObtained(
+			fn = { password, passwordType ->
+				assertTrue(false) // should never be allowed to get here with incorrect input
+			},
+			userCanceled_fn = {
+				assertTrue(false) // not expecting that
+			}
+		)
+		//
+		// This may not be necessary but the above code may become asynchronous
+		Thread.sleep(
+			(PasswordController.maxLegal_numberOfTriesDuringThisTimePeriod+1+2)
+				* MockedPasswords_SpammingIncorrectEntryDelegate.spamTryInterval_ms
+		)
+		//
+		assertTrue("Did not see PasswordController lock out password entry attempts due to spam", didSeeLockOutAfterMaxTries)
 	}
 	//
 	object MockedPasswords_VerifyUserAuth_Correct_EntryDelegate: PasswordEntryDelegate
