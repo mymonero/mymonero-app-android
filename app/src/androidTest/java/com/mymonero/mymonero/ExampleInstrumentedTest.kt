@@ -43,6 +43,7 @@ import org.junit.runner.RunWith
 import org.junit.Assert.*
 
 import android.util.Log
+import kotlinx.coroutines.experimental.runBlocking
 import org.junit.Assert
 import java.util.*
 
@@ -114,7 +115,8 @@ class ExampleInstrumentedTest {
 	val mockedSavedObjects__addtlVal_ = "Some extra test data"
 	object MockedPasswordProvider: PasswordProvider
 	{ // this class is no longer necessary
-		override var password: Password? = "_ password"
+		override val password: Password?
+			get() = "_ password"
 	}
 	class MockedSavedObject: PersistableObject
 	{
@@ -236,7 +238,7 @@ class ExampleInstrumentedTest {
 			) -> Unit
 		) {
 			assertTrue(isForChangePassword == false)
-			assertTrue(PasswordController.appInstance.password == null && PasswordController.appInstance.passwordType == null)
+			assertTrue(PasswordController.appInstance.password == null)
 			//
 			val userInput = this.createNewUserInput
 			val passwordType = PasswordType.new_detectedFromPassword(userInput)
