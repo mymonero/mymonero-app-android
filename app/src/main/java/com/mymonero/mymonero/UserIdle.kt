@@ -34,13 +34,13 @@
 package com.mymonero.mymonero
 
 import android.util.Log
-import junit.framework.Assert
-import java.util.Timer
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.concurrent.schedule
 //
 class UserIdleControllerInitParams(
 	idleTimeoutAfterS_settingsProvider: IdleTimeoutAfterS_SettingsProvider
@@ -79,7 +79,8 @@ class UserIdleController
 	// Properties - Runtime - Internal
 	private var _numberOfSecondsSinceLastUserInteraction = AtomicLong(0)
 	private var _numberOfRequestsToLockUserIdleAsDisabled = AtomicInteger(0)
-	private var _userIdle_intervalTimer = AtomicReference<Timer?>(null)
+	private var _userIdle_intervalExecutor = ScheduledThreadPoolExecutor(1)
+	private var _userIdle_currentIntervalTask_scheduledFuture = AtomicReference<ScheduledFuture<*>?>(null)
 	//
 	// Lifecycle - Init
 	constructor(initParams: UserIdleControllerInitParams)
@@ -93,7 +94,7 @@ class UserIdleController
 		this.startObserving()
 		// ^- let's do the above first
 		//
-		this._initiate_userIdle_intervalTimer()
+		this._initiate_userIdle_timer()
 	}
 	fun startObserving()
 	{
@@ -158,55 +159,51 @@ class UserIdleController
 	// Imperatives - Internal
 	private fun __disable_userIdle()
 	{
-		val old_timer = this._userIdle_intervalTimer.getAndSet(null) // free
-		if (old_timer == null) {
-			throw AssertionError("__disable_userIdle called but already have null this.userIdle_intervalTimer")
+		val old_future = this._userIdle_currentIntervalTask_scheduledFuture.getAndSet(null) // free
+		if (old_future == null) {
+			throw AssertionError("__disable_userIdle called but already have null at this._userIdle_currentIntervalTask_scheduledFuture")
 		}
-		old_timer.cancel() // stop and terminate timer thread .. probably necessary every time we're done with the timer
-		old_timer.purge()
+		old_future.cancel(true) // stop and terminate timer thread .. probably necessary every time we're done with the timer
 	}
 	private fun __reEnable_userIdle()
 	{
-		if (this._userIdle_intervalTimer.get() != null) {
-			throw AssertionError("__reEnable_userIdle called but non-null this.userIdle_intervalTimer")
+		if (this._userIdle_currentIntervalTask_scheduledFuture.get() != null) {
+			throw AssertionError("__reEnable_userIdle called but non-null this._userIdle_currentIntervalTask_scheduledFuture")
 		}
-		this._initiate_userIdle_intervalTimer()
+		this._initiate_userIdle_timer()
 	}
 	//
-	private fun _initiate_userIdle_intervalTimer()
+	private fun _initiate_userIdle_timer()
 	{
-		val timer = Timer("userIdle", true)
-		val old_timer = this._userIdle_intervalTimer.getAndSet(timer)
-		if (old_timer != null) {
-			throw AssertionError("Expected this._userIdle_intervalTimer == null")
-		}
-		//
 		val captured_this = this
-		//
-		val interval_s: Long = 1
-		// already set the value above
-		timer.schedule(
-			delay = 1000 * interval_s,
-			period = 1000 * interval_s,
-			action = cb@
-			{
-				val sSinceLast = captured_this._numberOfSecondsSinceLastUserInteraction.incrementAndGet() // count the second
-				//
-				val appTimeoutAfterS = captured_this.idleTimeoutAfterS_settingsProvider.appTimeoutAfterS_nullForDefault_orNeverValue
-					?: captured_this.idleTimeoutAfterS_settingsProvider.default_appTimeoutAfterS // use default on no pw entered / no settings info yet
-				if (appTimeoutAfterS == captured_this.idleTimeoutAfterS_settingsProvider.appTimeoutAfterS_neverValue) { // then idle timer is specifically disabled
-					return@cb // do nothing
-				}
-				//
-				if (sSinceLast >= appTimeoutAfterS) {
-					val wasUserIdle = captured_this._isUserIdle.getAndSet(true)
-					if (wasUserIdle == false) { // not already idle (else redundant)
-						Log.d("App.UserIdle", "User became idle.")
-						captured_this.userDidBecomeIdle_fns.invoke(captured_this, "") // TODO: invoke on some shared thread?
-					}
+		val task = Runnable runnable@{
+			val sSinceLast = captured_this._numberOfSecondsSinceLastUserInteraction.incrementAndGet() // count the second
+			//
+			val appTimeoutAfterS = captured_this.idleTimeoutAfterS_settingsProvider.appTimeoutAfterS_nullForDefault_orNeverValue
+				?: captured_this.idleTimeoutAfterS_settingsProvider.default_appTimeoutAfterS // use default on no pw entered / no settings info yet
+			if (appTimeoutAfterS == captured_this.idleTimeoutAfterS_settingsProvider.appTimeoutAfterS_neverValue) { // then idle timer is specifically disabled
+				return@runnable // do nothing
+			}
+			//
+			if (sSinceLast >= appTimeoutAfterS) {
+				val wasUserIdle = captured_this._isUserIdle.getAndSet(true)
+				if (wasUserIdle == false) { // not already idle (else redundant)
+					Log.d("App.UserIdle", "User became idle.")
+					captured_this.userDidBecomeIdle_fns.invoke(captured_this, "") // TODO: invoke on some shared thread?
 				}
 			}
+		}
+		val interval_s: Long = 1
+		val future = this._userIdle_intervalExecutor.scheduleAtFixedRate(
+			task,
+			interval_s,
+			interval_s,
+			TimeUnit.SECONDS
 		)
+		val old_task = this._userIdle_currentIntervalTask_scheduledFuture.getAndSet(future)
+		if (old_task != null) {
+			throw AssertionError("Expected this._userIdle_intervalTimer == null")
+		}
 	}
 	//
 	// Delegation - Notifications
