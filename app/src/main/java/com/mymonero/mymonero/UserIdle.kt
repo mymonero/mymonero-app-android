@@ -193,6 +193,7 @@ class UserIdleController
 				}
 			}
 		}
+		this._numberOfSecondsSinceLastUserInteraction.set(0) // reset this in case the app disabled user idle at a time at all different from when the last idle breaking action occurred
 		val interval_s: Long = 1
 		val future = this._userIdle_intervalExecutor.scheduleAtFixedRate(
 			task,
