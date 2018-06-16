@@ -356,9 +356,9 @@ class PasswordController: PasswordProvider
 	}
 	fun startObserving_userIdle()
 	{
-		this.userIdleController.userDidBecomeIdle_fns.startObserving({ emitter, dummy ->
+		this.userIdleController.userDidBecomeIdle_fns.startObserving { emitter, _ ->
 			this._userDidBecomeIdle()
-		})
+		}
 	}
 	private fun initializeRuntimeAndBoot() {
 		this.runSync { self -> // is blocking

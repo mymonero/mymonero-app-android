@@ -47,17 +47,54 @@ interface IdleTimeoutAfterS_SettingsProvider
 	var appTimeoutAfterS_nullForDefault_orNeverValue: Long?
 }
 //
+enum class DictKey(val rawValue: String)
+{
+	_id("_id"),
+	specificAPIAddressURLAuthority("specificAPIAddressURLAuthority"),
+	appTimeoutAfterS_nilForDefault_orNeverValue("appTimeoutAfterS_nilForDefault_orNeverValue"),
+	displayCurrencySymbol("displayCurrencySymbol"),
+	authentication__requireWhenSending("authentication__requireWhenSending"),
+	authentication__requireToShowWalletSecrets("authentication__requireToShowWalletSecrets"),
+	authentication__tryBiometric("authentication__tryBiometric");
+	//
+	val key: String = this.rawValue
+	companion object {
+		val setForbidden_DictKeys: List<DictKey> = listOf(DictKey._id)
+	}
+}
+//
 object SettingsController: IdleTimeoutAfterS_SettingsProvider
 {
 	//
 	// Constants - Default values
 	override val default_appTimeoutAfterS: Long = 90 // s …… 30 was a bit short for new users
+	val default_displayCurrencySymbol: CurrencySymbol
+		get() {
+			return Currency.XMR.symbol
+		}
+	val default_authentication__requireWhenSending = true
+	val default_authentication__requireToShowWalletSecrets = true
+	val default_authentication__tryBiometric = true
+
 	//
 	// Constants - Special states
 	override val appTimeoutAfterS_neverValue: Long = -1 // would preferably declare this in the SettingsProvider interface
 	//
+	// Constants - Persistence
+	val collectionName = "Settings"
+	//
 	// Properties
 	override var appTimeoutAfterS_nullForDefault_orNeverValue: Long? = null
+	//
+	// Properties - Events
+	val changed_specificAPIAddressURLAuthority_fns = EventEmitter<SettingsController, String>()
+	val changed_appTimeoutAfterS_nilForDefault_orNeverValue_fns = EventEmitter<SettingsController, Long?>()
+	val changed_displayCurrencySymbol_fns = EventEmitter<SettingsController, String>()
+	val changed_authentication__requireWhenSending_fns = EventEmitter<SettingsController, Boolean>()
+	val changed_authentication__requireToShowWalletSecrets_fns = EventEmitter<SettingsController, Boolean>()
+	val changed_authentication__tryBiometric_fns = "SettingsController_NotificationNames_Changed_authentication__tryBiometric"
+
+
 	//
 	// Lifecycle - Init
 }

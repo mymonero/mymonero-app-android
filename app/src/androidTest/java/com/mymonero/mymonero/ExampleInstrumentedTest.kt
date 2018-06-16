@@ -48,6 +48,7 @@ import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import org.junit.Assert
+import java.math.RoundingMode
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -1229,5 +1230,48 @@ class ExampleInstrumentedTest {
 		delay(checkIsFinallyLockedAfter_s, TimeUnit.SECONDS)
 		//
 		assertTrue("isUserIdle SHOULD be true ${checkIsFinallyLockedAfter_s}s after ${checkStillNotYetLockedAfterReEnable_s}s after re-enabling user idle", userIdleController.isUserIdle)
+	}
+	//
+	//
+	@Test fun mockedCurrencies__verifyConversions()
+	{
+		val xmrAmount = MoneroAmount("2618000000")
+		val xmrAmountDouble = DoubleFromMoneroAmount(xmrAmount)
+		val expected_xmrAmountDouble = 0.002618
+		assertTrue("Expected xmrAmountDouble of ${xmrAmountDouble} == Double(xmrAmount)", xmrAmountDouble == expected_xmrAmountDouble)
+		//
+		var didSeeUpdate = false
+		CcyConversionRatesController.didUpdateAvailabilityOfRates_fns.startObserving { emitter, _ ->
+			didSeeUpdate = true
+		}
+		//
+		val xmrToCcyRatesByCcy = mapOf(
+			Currency.USD to 126.66
+		)
+		CcyConversionRatesController.set_xmrToCcyRatesByCcy(xmrToCcyRatesByCcy)
+		//
+		assertTrue("Expected to have seen rates update by now", didSeeUpdate)
+		//
+		val inCurrency_amountDouble = Currency.USD.displayUnitsRounded_amountInCurrency(xmrAmount)
+		val expected_inCurrency_amountDouble = 0.33
+		assertTrue("Expected inCurrency_amountDouble of ${inCurrency_amountDouble} to equal ${expected_inCurrency_amountDouble}", inCurrency_amountDouble == expected_inCurrency_amountDouble)
+		//
+		val inCurrency_amountFormattedString = Currency.USD.nonAtomicCurrency_localized_formattedString(
+			inCurrency_amountDouble!!,
+			decimalSeparator = "." // just to make it possible to do the string comparison here
+		)
+		val expected_inCurrency_amountFormattedString = "0.33"
+		assertTrue("Expected inCurrency_amountFormattedString of ${inCurrency_amountFormattedString} to equal ${expected_inCurrency_amountFormattedString}", inCurrency_amountFormattedString == expected_inCurrency_amountFormattedString)
+		//
+		//
+		val backInMonero_rounded_amountDouble = Currency.rounded_ccyConversionRateCalculated_moneroAmountDouble(
+			inCurrency_amountDouble,
+			Currency.USD
+		)
+		val expected_backInMonero_rounded_amountDouble = expected_xmrAmountDouble.toBigDecimal().setScale(
+			Currency.ccyConversionRateCalculated_moneroAmountDouble_roundingPlaces,
+			RoundingMode.HALF_EVEN /* to mimic round() behavior */
+		).toDouble()
+		assertTrue("Expected backInMonero_rounded_amountDouble of ${backInMonero_rounded_amountDouble} to equal ${expected_backInMonero_rounded_amountDouble}", backInMonero_rounded_amountDouble == expected_backInMonero_rounded_amountDouble)
 	}
 }
