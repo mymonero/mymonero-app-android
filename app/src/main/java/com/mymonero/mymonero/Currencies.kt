@@ -34,6 +34,7 @@
 package com.mymonero.mymonero
 
 import android.util.Log
+import java.math.RoundingMode
 import java.text.DecimalFormat
 import kotlin.math.pow
 import kotlin.math.round
@@ -41,6 +42,23 @@ import kotlin.math.round
 typealias CcyConversion_Rate = Double
 typealias CurrencySymbol = String
 typealias CurrencyUID = String
+
+object MoneyAmountFormatters
+{ // ^--- I /think/ we can use these --v same parameters for different types of money
+	val localized_bigDecimalParsing_doubleFormatter by lazy {
+		val formatter = DecimalFormat()
+		formatter.minimumFractionDigits = 1
+		formatter.maximumFractionDigits = MoneroConstants.currency_unitPlaces + 1
+		formatter.roundingMode = RoundingMode.DOWN // My reasoning is that we'd never want to accidentally round to too much money
+//		formatter.numberStyle = .decimal // not implemented b/c we're already using a DecimalFormat
+		formatter.isGroupingUsed = false // so as not to complicate matters.. for now
+		// this is already localized
+//		formatter.locale = Locale.current // to be explicit ... this could be reworked to be a "."-decimalSeparator-specific formatter
+		formatter.isParseBigDecimal = true
+		//
+		formatter
+	}
+}
 
 enum class Currency(val rawValue: String)
 {
@@ -114,7 +132,7 @@ enum class Currency(val rawValue: String)
 		if (final_amountDouble == 0.0) {
 			return "0"
 		}
-		val naiveLocalizedString = MoneroAmountFormatters.localized_doubleFormatter.format(final_amountDouble)!!
+		val naiveLocalizedString = MoneyAmountFormatters.localized_bigDecimalParsing_doubleFormatter .format(final_amountDouble)!!
 		val components = naiveLocalizedString.split(decimalSeparator)
 		val components_count = components.size
 		if (components_count <= 0) {

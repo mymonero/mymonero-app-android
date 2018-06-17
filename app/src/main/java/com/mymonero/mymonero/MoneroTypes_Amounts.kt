@@ -33,33 +33,43 @@
 
 package com.mymonero.mymonero
 
+import java.math.BigDecimal
 import java.math.BigInteger
-import java.math.RoundingMode
-import java.text.DecimalFormat
 import kotlin.math.pow
 
 typealias MoneroAmount = BigInteger
+
+object MoneroAmounts
+{
+	val atomicUnitsConversionFactor = 10.0.pow(MoneroConstants.currency_unitPlaces)
+	val atomicUnitsConversionFactor_bigDecimal = BigDecimal(atomicUnitsConversionFactor)
+}
+
 fun DoubleFromMoneroAmount(amount: MoneroAmount): Double
 {
-	return amount.toDouble()/10.0.pow(MoneroConstants.currency_unitPlaces)
+	return amount.toDouble()/MoneroAmounts.atomicUnitsConversionFactor
 }
 fun FormattedString(fromMoneroAmount: MoneroAmount): String
 {
 	return DoubleFromMoneroAmount(fromMoneroAmount).toString() // TODO: does this really work for all cases? 
 }
-//
-object MoneroAmountFormatters
+fun MoneroAmountFrom(doubleValue: Double): MoneroAmount
 {
-	val localized_doubleFormatter by lazy {
-		val formatter = DecimalFormat()
-		formatter.minimumFractionDigits = 1
-		formatter.maximumFractionDigits = MoneroConstants.currency_unitPlaces + 1
-		formatter.roundingMode = RoundingMode.DOWN
-//		formatter.numberStyle = .decimal // not implemented b/c we're already using a DecimalFormat
-		formatter.isGroupingUsed = false // so as not to complicate matters.. for now
-		// this is already localized
-//		formatter.locale = Locale.current // to be explicit ... this could be reworked to be a "."-decimalSeparator-specific formatter
-		//
-		formatter
-	}
+	//
+	// TODO: using BigDecimal is novel here - confirm this is working properly
+	//
+	val bigDecimal = BigDecimal(doubleValue) * MoneroAmounts.atomicUnitsConversionFactor_bigDecimal
+	//
+	return bigDecimal.toBigInteger() // toBigIntegerExact() is probably desirable here for rigor, but as it throws an exception when precision necessary, I need to ensure that would be totally precluded at the UI level first
+}
+fun MoneroAmountFrom( // aka cn_util.parse_money(...)
+	moneroAmountDoubleString: String,
+	decimalSeparator: String = Currency.decimalSeparator/* seems ok to reach into this namespace here */
+): MoneroAmount {
+	//
+	// TODO: Using a parser in bigDecimal mode and converting to bigInteger is novel here - confirm this is working properly
+	//
+	val bigDecimal = MoneroAmounts.atomicUnitsConversionFactor_bigDecimal * MoneyAmountFormatters.localized_bigDecimalParsing_doubleFormatter.parse(moneroAmountDoubleString) as BigDecimal
+	//
+	return bigDecimal.toBigInteger() as MoneroAmount // toBigIntegerExact() might be desirable here for rigor, but as it throws an exception when precision necessary, I need to ensure that would be totally precluded at the UI level first
 }
