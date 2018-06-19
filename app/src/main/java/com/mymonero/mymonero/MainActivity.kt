@@ -35,24 +35,29 @@ package com.mymonero.mymonero
 
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
-import kotlinx.android.synthetic.main.activity_main.*
-import android.util.Log
-import java.io.File
-import android.content.Context
+import android.content.Intent
 
-class MainActivity : AppCompatActivity() {
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+
+class MainActivity : AppCompatActivity()
+{
+	companion object
+	{ // Used to load the 'native-lib' library on application startup.
+		init {
+			System.loadLibrary("native-lib")
+		}
+	}
+    override fun onCreate(savedInstanceState: Bundle?)
+	{
         super.onCreate(savedInstanceState)
-
         setContentView(R.layout.activity_main)
-    }
-
-    companion object {
-
-        // Used to load the 'native-lib' library on application startup.
-        init {
-            System.loadLibrary("native-lib")
-        }
+		//
+		val intent = intent
+		when (intent.action) {
+			Intent.ACTION_VIEW -> {
+				val uri = intent.data!!
+//				val value = uri.getQueryParameter("...")
+			}
+		}
     }
 }
