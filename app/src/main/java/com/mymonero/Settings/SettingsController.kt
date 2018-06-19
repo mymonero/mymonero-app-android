@@ -73,27 +73,27 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 		val collectionName = "Settings" // so that it can be accessed prior to class instantiation
 		//
 		// Properties - Internal & Exposed for Testing (Not necessary for app integration)
-		val hasExisting_saved_document: Boolean // exposed only for testing - not used internally
-			get() {
-				//
-				// Here, this is not synchronized, because it's assumed that whoever is calling it is not doing so from an application code context, and is probably calling it prior to the construction of any instance
-				return _inThread_existing_saved_documentContentString != null
+		fun hasExisting_saved_document(documentPersister: DocumentPersister): Boolean // exposed only for testing - not used internally
+		{
+			//
+			// Here, this is not synchronized, because it's assumed that whoever is calling it is not doing so from an application code context, and is probably calling it prior to the construction of any instance
+			return this._inThread_existing_saved_documentContentString(documentPersister = documentPersister) != null
+		}
+		private fun _inThread_existing_saved_documentContentString(documentPersister: DocumentPersister): String?
+		{
+			val (err_str, documentContentStrings) = documentPersister.AllDocuments(collectionName = collectionName)
+			if (err_str != null) {
+				throw AssertionError(err_str)
 			}
-		private val _inThread_existing_saved_documentContentString: String?
-			get() {
-				val (err_str, documentContentStrings) = DocumentPersister.AllDocuments(collectionName = collectionName)
-				if (err_str != null) {
-					throw AssertionError(err_str)
-				}
-				val documentContentStrings_count = documentContentStrings!!.count()
-				if (documentContentStrings_count > 1) {
-					throw AssertionError("Invalid Settings data state - more than one document")
-				}
-				if (documentContentStrings_count < 1) {
-					return null
-				}
-				return documentContentStrings[0]
+			val documentContentStrings_count = documentContentStrings!!.count()
+			if (documentContentStrings_count > 1) {
+				throw AssertionError("Invalid Settings data state - more than one document")
 			}
+			if (documentContentStrings_count < 1) {
+				return null
+			}
+			return documentContentStrings[0]
+		}
 	}
 	//
 	// Protocols - Registrants
@@ -158,6 +158,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 	//
 	// Properties - Initial
 	private lateinit var applicationContext: Context
+	private lateinit var documentPersister: DocumentPersister
 	private lateinit var passwordController: PasswordController
 	//
 	// Properties - Internal
@@ -247,13 +248,17 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 	{
 		this.applicationContext = dep
 	}
+	fun init_documentPersister(dep: DocumentPersister)
+	{
+		this.documentPersister = dep
+	}
 	fun init_passwordController(dep: PasswordController)
 	{
 		this.passwordController = dep
 	}
 	override fun setup()
 	{
-		if (this.applicationContext == null || this.passwordController == null) {
+		if (this.applicationContext == null || this.passwordController == null || this.documentPersister == null) {
 			throw AssertionError("SettingsController missing dependency")
 		}
 		this.runSync runSync@{ self ->
@@ -262,7 +267,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 				self.passwordController.addRegistrantForChangePassword(self)
 			}
 			//
-			val documentContentString = _inThread_existing_saved_documentContentString
+			val documentContentString = SettingsController._inThread_existing_saved_documentContentString(this.documentPersister)
 			if (documentContentString == null) {
 				self._inThread_initWithDefaults()
 				return@runSync
@@ -506,7 +511,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 		//
 		val dict = this._inThread_new_dictRepresentation()
 		val documentFileString = PersistableObject.new_plaintextJSONStringFromDocumentDict(dict)
-		val err_str = DocumentPersister.Write(
+		val err_str = this.documentPersister.Write(
 			documentFileWithString = documentFileString,
 			id = this._id!!,
 			collectionName = collectionName
@@ -524,7 +529,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 	{
 		var err_str: String? = null
 		this.runSync { self -> // so as not to race with any saves
-			val (inner_err_str, _) = DocumentPersister.RemoveAllDocuments(collectionName = collectionName)
+			val (inner_err_str, _) = this.documentPersister.RemoveAllDocuments(collectionName = collectionName)
 			if (inner_err_str != null) {
 				err_str = inner_err_str
 			} else { // if delete succeeded

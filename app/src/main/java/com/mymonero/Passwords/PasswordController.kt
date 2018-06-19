@@ -186,6 +186,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 	//
 	// Properties - Dependencies
 	private lateinit var applicationContext: Context
+	private lateinit var documentPersister: DocumentPersister
 	private lateinit var userIdleController: UserIdleController
 	//
 	// Synchronization
@@ -243,7 +244,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 	private var _passwordType: PasswordType? = null // it will default to .password per init
 	val hasUserSavedAPassword: Boolean // we /probably/ don't need to synchronize this ... but we might
 		get() { // this obviously has a file I/O hit, which is not optimal; alternatives are use sparingly or cache at appropriate locations
-			val (err_str, ids) = DocumentPersister.IdsOfAllDocuments(
+			val (err_str, ids) = this.documentPersister.IdsOfAllDocuments(
 				collectionName = this.collectionName
 			)
 			if (err_str != null) {
@@ -332,13 +333,17 @@ class PasswordController: BuiltDependency, PasswordProvider
 	{
 		this.applicationContext = dep
 	}
+	fun init_documentPersister(dep: DocumentPersister)
+	{
+		this.documentPersister = dep
+	}
 	fun init_userIdleController(dep: UserIdleController)
 	{
 		this.userIdleController = dep
 	}
 	override fun setup()
 	{
-		if (this.applicationContext == null || this.userIdleController == null) {
+		if (this.applicationContext == null || this.userIdleController == null || this.documentPersister == null) {
 			throw AssertionError("PasswordController missing dependency")
 		}
 		this.startObserving_userIdle()
@@ -362,7 +367,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 		if (this._hasBooted == true) { // fatal
 			throw AssertionError("initializeRuntimeAndBoot called while already booted")
 		}
-		val (err_str, documentContentStrings) = DocumentPersister.AllDocuments(
+		val (err_str, documentContentStrings) = this.documentPersister.AllDocuments(
 			collectionName = this.collectionName
 		)
 		if (err_str != null) {
@@ -855,7 +860,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 					DictKey.messageAsEncryptedDataForUnlockChallenge_base64String.rawValue to this.messageAsEncryptedDataForUnlockChallenge_base64String!!
 				)
 				val documentFileString = PersistableObject.new_plaintextJSONStringFromDocumentDict(persistableDocument)
-				err_str = DocumentPersister.Write(
+				err_str = this.documentPersister.Write(
 					documentFileWithString = documentFileString,
 					id = this._id!!,
 					collectionName = this.collectionName
@@ -1071,7 +1076,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 					}
 					//
 					// now we can go ahead and delete the pw record
-					val (err_str, _) = DocumentPersister.RemoveAllDocuments(collectionName = self.collectionName)
+					val (err_str, _) = this.documentPersister.RemoveAllDocuments(collectionName = self.collectionName)
 					if (err_str != null) {
 						cb(err_str)
 						return@hasFiredWill_cb

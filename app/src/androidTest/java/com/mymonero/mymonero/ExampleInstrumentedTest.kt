@@ -43,6 +43,7 @@ import org.junit.Assert.*
 
 import android.util.Log
 import com.mymonero.Application.MainApplication
+import com.mymonero.Application.MainApplicationServiceLocator
 import com.mymonero.Application.UserIdleController
 import com.mymonero.Currencies.CcyConversionRatesController
 import com.mymonero.Currencies.Currency
@@ -57,7 +58,6 @@ import com.mymonero.Settings.IdleTimeoutAfterS_SettingsProvider
 import com.mymonero.Settings.SettingsController
 import kotlinx.coroutines.experimental.delay
 import kotlinx.coroutines.experimental.runBlocking
-import org.junit.Assert
 import java.math.RoundingMode
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -90,7 +90,9 @@ class ExampleInstrumentedTest {
 	@Test fun mockedPlainStringDoc__insert()
 	{
 		val id = DocumentFileDescription.new_documentId()
-		val err_str = DocumentPersister.Write(
+		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = DocumentPersister(applicationContext = applicationContext)
+		val err_str = documentPersister.Write(
 			documentFileWithString = "\"a\":2,\"id\":\"${id}\"",
 			id = id,
 			collectionName = mockedPlainStringDocs__CollectionName
@@ -100,30 +102,36 @@ class ExampleInstrumentedTest {
 	}
 	@Test fun mockedPlainStringDoc__allIds()
 	{
-		val (err_str, ids) = DocumentPersister.IdsOfAllDocuments(mockedPlainStringDocs__CollectionName)
+		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = DocumentPersister(applicationContext = applicationContext)
+		val (err_str, ids) = documentPersister.IdsOfAllDocuments(mockedPlainStringDocs__CollectionName)
 		assertEquals(null, err_str)
-		Assert.assertTrue(ids != null)
-		Assert.assertTrue(ids!!.count() > 0) // from __insert
+		assertTrue(ids != null)
+		assertTrue(ids!!.count() > 0) // from __insert
 		Log.d(mockedPlainStringDocs__LogTag, "ids: " + ids)
 	}
 	@Test fun mockedPlainStringDoc__allDocuments()
 	{
-		val (err_str, strings) = DocumentPersister.AllDocuments(mockedPlainStringDocs__CollectionName)
+		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = DocumentPersister(applicationContext = applicationContext)
+		val (err_str, strings) = documentPersister.AllDocuments(mockedPlainStringDocs__CollectionName)
 		assertEquals(null, err_str)
-		Assert.assertTrue(strings != null)
-		Assert.assertTrue(strings!!.count() > 0) // from __insert
+		assertTrue(strings != null)
+		assertTrue(strings!!.count() > 0) // from __insert
 		Log.d(mockedPlainStringDocs__LogTag, "strings: " + strings)
 	}
 	@Test fun mockedPlainStringDoc__removeAllDocuments()
 	{
-		val (fetch__err_str, ids) = DocumentPersister.IdsOfAllDocuments(mockedPlainStringDocs__CollectionName)
+		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = DocumentPersister(applicationContext = applicationContext)
+		val (fetch__err_str, ids) = documentPersister.IdsOfAllDocuments(mockedPlainStringDocs__CollectionName)
 		assertEquals(null, fetch__err_str)
-		Assert.assertTrue(ids != null)
-		Assert.assertTrue(ids!!.count() > 0) // from __insert
+		assertTrue(ids != null)
+		assertTrue(ids!!.count() > 0) // from __insert
 		//
-		val (remove__err_str, numRemoved) = DocumentPersister.RemoveAllDocuments(mockedPlainStringDocs__CollectionName)
+		val (remove__err_str, numRemoved) = documentPersister.RemoveAllDocuments(mockedPlainStringDocs__CollectionName)
 		assertEquals(null, remove__err_str)
-		Assert.assertTrue(numRemoved!! == ids!!.count()) // from __insert
+		assertTrue(numRemoved!! == ids!!.count()) // from __insert
 	}
 	//
 	// PersistableObject
@@ -137,18 +145,21 @@ class ExampleInstrumentedTest {
 	class MockedSavedObject: PersistableObject
 	{
 		lateinit var addtlVal: String // set this after init to avoid test fail
-		constructor(passwordProvider: PasswordProvider): super(passwordProvider)
 		constructor(
 			passwordProvider: PasswordProvider,
+			documentPersister: DocumentPersister
+		): super(passwordProvider, documentPersister)
+		constructor(
+			passwordProvider: PasswordProvider,
+			documentPersister: DocumentPersister,
 			plaintextData: DocumentJSON
-		): super(passwordProvider, plaintextData)
+		): super(passwordProvider, documentPersister, plaintextData)
 		{
-			Assert.assertTrue(this.passwordProvider != null)
-			Assert.assertTrue(this._id != null)
-			Assert.assertTrue(this.insertedAt_sSinceEpoch != null)
+			assertTrue(this._id != null)
+			assertTrue(this.insertedAt_sSinceEpoch != null)
 			//
 			this.addtlVal = plaintextData["addtlVal"] as String
-			Assert.assertTrue(this.addtlVal != null)
+			assertTrue(this.addtlVal != null)
 		}
 		override fun new_dictRepresentation(): MutableDocumentJSON
 		{
@@ -163,27 +174,31 @@ class ExampleInstrumentedTest {
 	}
 	@Test fun mockedSavedObjects__insertNew()
 	{
-		val obj = MockedSavedObject(MockedPasswordProvider) // new
+		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = DocumentPersister(applicationContext = applicationContext)
+		val obj = MockedSavedObject(MockedPasswordProvider, documentPersister) // new
 		obj.addtlVal = mockedSavedObjects__addtlVal_
 		//
 		val errStr = obj.saveToDisk()
 		assertEquals(null, errStr)
-		Assert.assertTrue(obj._id != null)
+		assertTrue(obj._id != null)
 	}
 	@Test fun mockedSavedObjects__loadExisting()
 	{
-		val (err_str, ids) = DocumentPersister.IdsOfAllDocuments(mockedSavedObjects__CollectionName)
+		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = DocumentPersister(applicationContext = applicationContext)
+		val (err_str, ids) = documentPersister.IdsOfAllDocuments(mockedSavedObjects__CollectionName)
 		assertEquals(null, err_str)
-		Assert.assertTrue(ids != null)
-		Assert.assertTrue(ids!!.count() > 0) // from __insertNew
+		assertTrue(ids != null)
+		assertTrue(ids!!.count() > 0) // from __insertNew
 		//
-		val (load__errStr, documentContentStrings) = DocumentPersister.DocumentsData(
+		val (load__errStr, documentContentStrings) = documentPersister.DocumentsData(
 			ids = ids,
 			collectionName = mockedSavedObjects__CollectionName
 		)
 		assertEquals(null, load__errStr)
-		Assert.assertTrue(documentContentStrings != null)
-		Assert.assertTrue(documentContentStrings!!.count() > 0)
+		assertTrue(documentContentStrings != null)
+		assertTrue(documentContentStrings!!.count() > 0)
 		for (encrypted_documentContentString in documentContentStrings) {
 			val plaintext_documentContentString = PersistableObject.new_plaintextStringFrom(
 				encrypted_documentContentString,
@@ -192,27 +207,30 @@ class ExampleInstrumentedTest {
 			val plaintext_documentJSON = PersistableObject.new_plaintextDocumentDictFromJSONString(plaintext_documentContentString)
 			val listedObjectInstance = MockedSavedObject(
 				MockedPasswordProvider,
+				documentPersister,
 				plaintext_documentJSON
 			)
-			Assert.assertTrue(listedObjectInstance._id != null)
-			Assert.assertTrue(listedObjectInstance.insertedAt_sSinceEpoch != null)
+			assertTrue(listedObjectInstance._id != null)
+			assertTrue(listedObjectInstance.insertedAt_sSinceEpoch != null)
 			assertEquals(mockedSavedObjects__addtlVal_, listedObjectInstance.addtlVal)
 		}
 	}
 	@Test fun mockedSavedObjects__deleteExisting()
 	{
-		val (err_str, ids) = DocumentPersister.IdsOfAllDocuments(mockedSavedObjects__CollectionName)
+		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = DocumentPersister(applicationContext = applicationContext)
+		val (err_str, ids) = documentPersister.IdsOfAllDocuments(mockedSavedObjects__CollectionName)
 		assertEquals(null, err_str)
-		Assert.assertTrue(ids != null)
-		Assert.assertTrue(ids!!.count() > 0) // from __insertNew
+		assertTrue(ids != null)
+		assertTrue(ids!!.count() > 0) // from __insertNew
 		//
-		val (load__errStr, documentContentStrings) = DocumentPersister.DocumentsData(
+		val (load__errStr, documentContentStrings) = documentPersister.DocumentsData(
 			ids = ids,
 			collectionName = mockedSavedObjects__CollectionName
 		)
 		assertEquals(null, load__errStr)
-		Assert.assertTrue(documentContentStrings != null)
-		Assert.assertTrue(documentContentStrings!!.count() > 0)
+		assertTrue(documentContentStrings != null)
+		assertTrue(documentContentStrings!!.count() > 0)
 		for (encrypted_documentContentString in documentContentStrings) {
 			val plaintext_documentContentString = PersistableObject.new_plaintextStringFrom(
 				encrypted_documentContentString,
@@ -221,13 +239,14 @@ class ExampleInstrumentedTest {
 			val plaintext_documentJSON = PersistableObject.new_plaintextDocumentDictFromJSONString(plaintext_documentContentString)
 			val listedObjectInstance = MockedSavedObject(
 				MockedPasswordProvider,
+				documentPersister,
 				plaintext_documentJSON
 			)
-			Assert.assertTrue(listedObjectInstance._id != null)
-			Assert.assertTrue(listedObjectInstance.insertedAt_sSinceEpoch != null)
+			assertTrue(listedObjectInstance._id != null)
+			assertTrue(listedObjectInstance.insertedAt_sSinceEpoch != null)
 			//
 			val delete__errStr = listedObjectInstance.delete()
-			Assert.assertTrue(delete__errStr == null)
+			assertTrue(delete__errStr == null)
 		}
 	}
 	//
@@ -1017,6 +1036,7 @@ class ExampleInstrumentedTest {
 	{ // This test should be run while the password is the original password - before it's been changed
 		//
 		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = DocumentPersister(applicationContext = applicationContext)
 		//
 		val idleTimeoutAfterS_settingsProvider = MockedUserIdle_Short_IdleTimeoutAfterS_SettingsProvider // pretending to be the SettingsController
 		val userIdleController = UserIdleController()
@@ -1025,6 +1045,7 @@ class ExampleInstrumentedTest {
 		//
 		val passwordController = PasswordController()
 		passwordController.init_applicationContext(applicationContext)
+		passwordController.init_documentPersister(documentPersister)
 		passwordController.init_userIdleController(userIdleController)
 		//
 		//
@@ -1196,8 +1217,10 @@ class ExampleInstrumentedTest {
 	//
 	@Test fun settings_settingAndGetting()
 	{
+		val applicationContext = MainApplication.instance.applicationContext
+		val documentPersister = MainApplication.serviceLocator.documentPersister
 		// First, determine whether Settings already saved... before any boot
-		val settingsAlreadySaved = SettingsController.hasExisting_saved_document
+		val settingsAlreadySaved = SettingsController.hasExisting_saved_document(documentPersister)
 		//
 		val controller = MainApplication.serviceLocator/*lazy*/.settingsController
 		assertTrue("Expected settingsController.hasBooted", controller.hasBooted)

@@ -47,7 +47,8 @@ open class PersistableObject
 {
 	//
 	// Properties
-	var passwordProvider: PasswordProvider
+	private val passwordProvider: PasswordProvider
+	private val documentPersister: DocumentPersister
 	//
 	var _id: String? = null
 	var insertedAt_sSinceEpoch: Long? = null // stored on disk as a String to preserve Long
@@ -86,13 +87,15 @@ open class PersistableObject
 	}
 	//
 	// Lifecycle - Setup
-	constructor(passwordProvider: PasswordProvider)
+	constructor(passwordProvider: PasswordProvider, documentPersister: DocumentPersister)
 	{ // placed here for inserts
 		this.passwordProvider = passwordProvider
+		this.documentPersister = documentPersister
 	}
-	constructor(passwordProvider: PasswordProvider, plaintextData: DocumentJSON)
+	constructor(passwordProvider: PasswordProvider, documentPersister: DocumentPersister, plaintextData: DocumentJSON)
 	{
 		this.passwordProvider = passwordProvider
+		this.documentPersister = documentPersister
 		//
 		this._id = plaintextData["_id"] as? DocumentId
 		(plaintextData["insertedAt_sSinceEpoch"] as String).let {
@@ -198,8 +201,11 @@ open class PersistableObject
 	fun __write(): String? // err_str
 	{
 		val stringToWrite = this.new_encrypted_serializedFileRepresentation()
+		if (stringToWrite == "") {
+			throw AssertionError("stringToWrite should never be empty")
+		}
 		//
-		return DocumentPersister.Write(stringToWrite, this._id!!, this.collectionName())
+		return this.documentPersister.Write(stringToWrite, this._id!!, this.collectionName())
 	}
 	// - Deleting
 	fun delete(): String? // err_str
@@ -217,7 +223,7 @@ open class PersistableObject
 		}
 		assert(this._id != null)
 		this.willBeDeleted_fns.invoke(this, "")
-		val (err_str, _) = DocumentPersister.RemoveDocuments(
+		val (err_str, _) = this.documentPersister.RemoveDocuments(
 			collectionName = this.collectionName(),
 			ids = listOf(this._id!!)
 		)

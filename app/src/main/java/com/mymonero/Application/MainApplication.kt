@@ -36,6 +36,7 @@ import android.app.Application
 import android.content.Context
 import com.mymonero.Passwords.PasswordController
 import com.mymonero.KotlinUtils.ServiceLocator
+import com.mymonero.Persistence.DocumentPersister
 import com.mymonero.Settings.SettingsController
 
 //
@@ -48,6 +49,9 @@ open class ApplicationServiceLocator: ServiceLocator
 			throw AssertionError("nil MainApplication.instance")
 		}
 		MainApplication.instance.applicationContext
+	}
+	val documentPersister: DocumentPersister by lazy {
+		DocumentPersister(applicationContext = this.applicationContext)
 	}
 	//
 	lateinit var settingsController: SettingsController
@@ -70,11 +74,13 @@ open class ApplicationServiceLocator: ServiceLocator
 		//
 		// II. Assemble graph
 		this.passwordController.init_applicationContext(this.applicationContext)
+		this.passwordController.init_documentPersister(this.documentPersister)
 		this.passwordController.init_userIdleController(this.userIdleController)
 		//
 		this.userIdleController.init_idleTimeoutAfterS_settingsProvider(this.settingsController)
 		//
 		this.settingsController.init_applicationContext(this.applicationContext)
+		this.settingsController.init_documentPersister(this.documentPersister)
 		this.settingsController.init_passwordController(this.passwordController)
 		//
 		// III. Setup ("build()")

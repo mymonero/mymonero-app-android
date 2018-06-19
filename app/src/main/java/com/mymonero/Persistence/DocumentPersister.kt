@@ -33,9 +33,9 @@
 
 package com.mymonero.Persistence
 
+import android.app.Application
 import java.util.UUID
 import android.content.Context
-import com.mymonero.Application.MainApplication
 import java.io.*
 
 typealias DocumentId = String
@@ -59,8 +59,9 @@ data class DocumentFileDescription(
 	val new_filename: String
 		get() = "${this.new_fileKey}.$filenameExt"
 }
-object DocumentPersister
-{
+class DocumentPersister(
+	val applicationContext: Context
+) {
 	//
 	// Interface - Accessory classes - Method return values
 	data class ErrorOr_DocumentFileDescriptions(
@@ -154,7 +155,7 @@ object DocumentPersister
 				inCollectionName = collectionName,
 				documentId = id
 			)
-			val context = MainApplication.instance.applicationContext
+			val context = this.applicationContext
 			val deleted = context.deleteFile(fileDescription.new_filename)
 			if (deleted) {
 				numRemoved += 1
@@ -178,7 +179,7 @@ object DocumentPersister
 		collectionName: CollectionName
 	): ErrorOr_DocumentFileDescriptions {
 		var fileDescriptions = mutableListOf<DocumentFileDescription>()
-		val context = MainApplication.instance.applicationContext
+		val context = this.applicationContext
 		val listOfFiles = context.fileList()
 		// filtering to what should be app DocumentPersister files
 		val filenameSuffix = ".${DocumentFileDescription.filenameExt}"
@@ -232,7 +233,7 @@ object DocumentPersister
 		var string: String?
 		var fis: FileInputStream? = null
 		try {
-			fis = MainApplication.instance.applicationContext.openFileInput(
+			fis = this.applicationContext.openFileInput(
 				documentFileDescription.new_filename
 			)
 			val isr = InputStreamReader(fis)
@@ -260,7 +261,7 @@ object DocumentPersister
 	) {
 		var fos: FileOutputStream? = null
 		try {
-			fos = MainApplication.instance.applicationContext.openFileOutput(
+			fos = this.applicationContext.openFileOutput(
 				fileDescription.new_filename,
 				Context.MODE_PRIVATE
 			)
