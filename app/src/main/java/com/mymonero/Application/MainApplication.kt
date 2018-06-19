@@ -30,10 +30,14 @@
 //  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-package com.mymonero.mymonero
+package com.mymonero.Application
 
 import android.app.Application
 import android.content.Context
+import com.mymonero.Passwords.PasswordController
+import com.mymonero.KotlinUtils.ServiceLocator
+import com.mymonero.Settings.SettingsController
+
 //
 open class ApplicationServiceLocator: ServiceLocator
 {
@@ -96,7 +100,7 @@ class MainApplication : Application()
 	//
 	init
 	{
-		MainApplication.instance = this
+		instance = this
 	}
 	override fun onCreate()
 	{

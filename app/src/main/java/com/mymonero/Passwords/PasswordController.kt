@@ -31,10 +31,16 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //
-package com.mymonero.mymonero
+package com.mymonero.Passwords
 
 import android.content.Context
 import android.util.Log
+import com.mymonero.KotlinUtils.EventEmitter
+import com.mymonero.KotlinUtils.EventSubscriptionToken
+import com.mymonero.Application.UserIdleController
+import com.mymonero.KotlinUtils.BuiltDependency
+import com.mymonero.Persistence.*
+import com.mymonero.mymonero.R
 import kotlinx.coroutines.experimental.*
 import java.lang.ref.WeakReference
 import java.util.concurrent.ScheduledFuture
@@ -64,7 +70,7 @@ public enum class PasswordType(val rawValue: String)
 			val numbers = "0123456789"
 			val passwordWithoutNumbers = password.filterNot { c -> numbers.contains(c) }
 			if (passwordWithoutNumbers.isEmpty()) { // and contains only numbers
-				return PasswordType.PIN
+				return PIN
 			}
 			return PasswordType.password
 		}
@@ -670,7 +676,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 							_dateOf_firstPWTryDuringThisTimePeriod = System.currentTimeMillis()
 						}
 						_numberOfTriesDuringThisTimePeriod += 1
-						if (_numberOfTriesDuringThisTimePeriod > PasswordController.maxLegal_numberOfTriesDuringThisTimePeriod) { // rhs must be > 0
+						if (_numberOfTriesDuringThisTimePeriod > maxLegal_numberOfTriesDuringThisTimePeriod) { // rhs must be > 0
 							_numberOfTriesDuringThisTimePeriod = 0
 							// ^- no matter what, we're going to need to reset the above state for the next 'time period'
 							//
@@ -678,7 +684,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 							val noMoreThanNTriesWithin_ms = 30 * 1000
 							if (ms_since_firstPWTryDuringThisTimePeriod > noMoreThanNTriesWithin_ms) { // enough time has passed since this group began - only reset the "time period" with tries->0 and val this pass through as valid check
 								_dateOf_firstPWTryDuringThisTimePeriod = null // not strictly necessary to do here as we reset the number of tries during this time period to zero just above
-								Log.d("Passwords", "There were more than ${PasswordController.maxLegal_numberOfTriesDuringThisTimePeriod} password entry attempts during this time period but the last attempt was more than ${noMoreThanNTriesWithin_ms/1000}s ago, so letting this go.")
+								Log.d("Passwords", "There were more than $maxLegal_numberOfTriesDuringThisTimePeriod password entry attempts during this time period but the last attempt was more than ${noMoreThanNTriesWithin_ms/1000}s ago, so letting this go.")
 							} else { // simply too many tries!…
 								// lock it out for the next time (supposing this try does not pass)
 								_isCurrentlyLockedOut = true
@@ -725,7 +731,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 					//
 					// I. Validate features of pw before trying and accepting
 					if (userSelectedTypeOfPassword == PasswordType.PIN) {
-						if (obtainedPasswordString!!.count() < PasswordController.minPasswordLength) { // self is too short. get back to them with a validation err by re-entering obtainPasswordFromUser_cb
+						if (obtainedPasswordString!!.count() < minPasswordLength) { // self is too short. get back to them with a validation err by re-entering obtainPasswordFromUser_cb
 							self._inThread_unguard_getNewOrExistingPassword()
 							val err_str = self.applicationContext.resources.getString(R.string.enter_longer_pin)
 							self.erroredWhileSettingNewPassword_fns(self, err_str)
@@ -734,7 +740,7 @@ class PasswordController: BuiltDependency, PasswordProvider
 						// TODO: check if all numbers
 						// TODO: check that numbers are not all just one number
 					} else if (userSelectedTypeOfPassword == PasswordType.password) {
-						if (obtainedPasswordString!!.count() < PasswordController.minPasswordLength) { // this is too short. get back to them with a validation err by re-entering obtainPasswordFromUser_cb
+						if (obtainedPasswordString!!.count() < minPasswordLength) { // this is too short. get back to them with a validation err by re-entering obtainPasswordFromUser_cb
 							self._inThread_unguard_getNewOrExistingPassword()
 							val err_str = self.applicationContext.resources.getString(R.string.enter_longer_password)
 							self.erroredWhileSettingNewPassword_fns.invoke(self, err_str)

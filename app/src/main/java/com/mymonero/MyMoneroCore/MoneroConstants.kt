@@ -1,5 +1,5 @@
 //
-//  DocumentPersister.kt
+//  MoneroConstants.kt
 //  MyMonero
 //
 //  Copyright (c) 2014-2018, MyMonero.com
@@ -31,43 +31,24 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-package com.mymonero.mymonero
+package com.mymonero.MyMoneroCore
 
-import java.util.*
-
-typealias EventSubscriptionToken = String
-
-class EventEmitter<TS, TA> // TS: source; TA: arg
+object MoneroConstants
 {
-	companion object {
-		private fun new_subscriptionToken(): EventSubscriptionToken = UUID.randomUUID().toString() // hopefully this isn't too slow
-	}
-	private val invocationMap = mutableMapOf<EventSubscriptionToken, (TS,TA) -> Unit>()
+	val currency_name = "Monero"
+	val currency_symbol = "XMR"
+	val currency_requestURIPrefix = "monero:"
+	val currency_requestURIPrefix_sansColon = "monero"
+	val currency_openAliasPrefix = "xmr" // OpenAlias prefix
 	//
-	// Interface
-	fun startObserving(m: (TS,TA) -> Unit): EventSubscriptionToken {
-		val token = EventEmitter.new_subscriptionToken()
-		synchronized(invocationMap) {
-			invocationMap[token] = m
-		}
-		//
-		return token
-	}
-	fun stopObserving(token: EventSubscriptionToken) {
-		synchronized(invocationMap) {
-			invocationMap.remove(token)
-		}
-	}
-	operator fun invoke(source: TS, arg: TA) {
-		// call by executing instance of this as if function
-		var existing_invocationMap: MutableMap<EventSubscriptionToken, (TS, TA) -> Unit>? = null
-		synchronized(invocationMap) { // TODO: is it alright to synchronize the read alone?
-			existing_invocationMap = invocationMap
-		}
-		for ((_, m) in existing_invocationMap!!) {
-			m(source, arg)
-		}
-	}
+	val addressPrefix = 18 // Prefix code for addresses; 18 => addresses start with "4"
+	val integratedAddressPrefix = 19 // Prefix code for addresses
+	//
+	val currency_unitPlaces = 12 // Number of atomic units in one unit of currency. e.g. 12 => 10^12 =
+	//
+	val txMinConfirms = 10 // Minimum number of confirmations for a transaction to show as confirmed
+	val maxBlockNumber: Long = 500000000 // Maximum block number, used for tx unlock time
+	val avgBlockTime: Long = 60 // Average block time in seconds, used for unlock time estimation
+	//
+	val dustThreshold = MoneroAmount("2000000000") // Dust threshold in atomic units; 2*10^9 used for choosing outputs/change - we decompose all the way down if the receiver wants now regardless of threshold
 }
-//
-object Events {}

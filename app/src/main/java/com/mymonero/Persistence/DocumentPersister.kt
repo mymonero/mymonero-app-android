@@ -31,12 +31,11 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-package com.mymonero.mymonero
+package com.mymonero.Persistence
 
-import android.util.Log
 import java.util.UUID
 import android.content.Context
-import android.support.v4.provider.DocumentFile
+import com.mymonero.Application.MainApplication
 import java.io.*
 
 typealias DocumentId = String
@@ -56,9 +55,9 @@ data class DocumentFileDescription(
 		fun new_documentId(): DocumentId = UUID.randomUUID().toString()
 	}
 	val new_fileKey: String
-		get() = "${this.inCollectionName}${DocumentFileDescription.fileKeyComponentDelimiterString}${this.documentId}"
+		get() = "${this.inCollectionName}$fileKeyComponentDelimiterString${this.documentId}"
 	val new_filename: String
-		get() = "${this.new_fileKey}.${DocumentFileDescription.filenameExt}"
+		get() = "${this.new_fileKey}.$filenameExt"
 }
 object DocumentPersister
 {
@@ -97,12 +96,12 @@ object DocumentPersister
 				documentId = it
 			)
 		}
-		return this._read_existentDocumentContentStrings(fileDescriptions)
+		return _read_existentDocumentContentStrings(fileDescriptions)
 	}
 	fun IdsOfAllDocuments(
 		collectionName: CollectionName
 	): ErrorOr_DocumentIds {
-		val (err_str, fileDescriptions) = this._read_documentFileDescriptions(collectionName)
+		val (err_str, fileDescriptions) = _read_documentFileDescriptions(collectionName)
 		if (err_str != null) {
 			return ErrorOr_DocumentIds(err_str, null)
 		}
@@ -120,13 +119,13 @@ object DocumentPersister
 	fun AllDocuments(
 		collectionName: CollectionName
 	): ErrorOr_DocumentContentStrings {
-		val (err_str, fileDescriptions) = this._read_documentFileDescriptions(collectionName)
+		val (err_str, fileDescriptions) = _read_documentFileDescriptions(collectionName)
 		if (err_str != null) {
 			return ErrorOr_DocumentContentStrings(err_str, null)
 		}
 		assert(fileDescriptions != null)
 		//
-		return this._read_existentDocumentContentStrings(fileDescriptions!!)
+		return _read_existentDocumentContentStrings(fileDescriptions!!)
 	}
 	//
 	// Interface - Imperatives
@@ -139,7 +138,7 @@ object DocumentPersister
 			inCollectionName = collectionName,
 			documentId = id
 		)
-		this._write_fileDescriptionDocumentString(
+		_write_fileDescriptionDocumentString(
 			fileDescription = fileDescription,
 			string = documentFileWithString
 		)
@@ -167,11 +166,11 @@ object DocumentPersister
 	fun RemoveAllDocuments(
 		collectionName: CollectionName
 	): ErrorOr_NumRemoved {
-		val (err_str, ids) = this.IdsOfAllDocuments(collectionName)
+		val (err_str, ids) = IdsOfAllDocuments(collectionName)
 		if (err_str != null) {
 			return ErrorOr_NumRemoved(err_str, null)
 		}
-		return this.RemoveDocuments(collectionName = collectionName, ids = ids!!)
+		return RemoveDocuments(collectionName = collectionName, ids = ids!!)
 	}
 	//
 	// Internal - Accessors - Files
@@ -218,7 +217,7 @@ object DocumentPersister
 			return ErrorOr_DocumentContentStrings(null, documentContentStrings)
 		}
 		for (documentFileDescription in documentFileDescriptions) {
-			val (err_str, contentString) = this.__read_existentDocumentContentString(documentFileDescription)
+			val (err_str, contentString) = __read_existentDocumentContentString(documentFileDescription)
 			if (err_str != null) {
 				return ErrorOr_DocumentContentStrings(err_str, null) // immediately
 			}

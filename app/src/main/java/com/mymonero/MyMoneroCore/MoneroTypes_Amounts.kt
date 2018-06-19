@@ -31,8 +31,10 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-package com.mymonero.mymonero
+package com.mymonero.MyMoneroCore
 
+import com.mymonero.Currencies.Currency
+import com.mymonero.Currencies.MoneyAmountFormatters
 import java.math.BigDecimal
 import java.math.BigInteger
 import kotlin.math.pow
@@ -47,11 +49,11 @@ object MoneroAmounts
 
 fun DoubleFromMoneroAmount(amount: MoneroAmount): Double
 {
-	return amount.toDouble()/MoneroAmounts.atomicUnitsConversionFactor
+	return amount.toDouble()/ MoneroAmounts.atomicUnitsConversionFactor
 }
 fun FormattedString(fromMoneroAmount: MoneroAmount): String
 {
-	return DoubleFromMoneroAmount(fromMoneroAmount).toString() // TODO: does this really work for all cases? 
+	return DoubleFromMoneroAmount(fromMoneroAmount).toString() // TODO: does this really work for all cases?
 }
 fun MoneroAmountFrom(doubleValue: Double): MoneroAmount
 {

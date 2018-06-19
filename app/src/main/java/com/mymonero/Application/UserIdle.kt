@@ -31,9 +31,12 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //
-package com.mymonero.mymonero
+package com.mymonero.Application
 
 import android.util.Log
+import com.mymonero.KotlinUtils.BuiltDependency
+import com.mymonero.KotlinUtils.EventEmitter
+import com.mymonero.Settings.IdleTimeoutAfterS_SettingsProvider
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit

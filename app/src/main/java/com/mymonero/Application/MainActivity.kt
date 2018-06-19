@@ -31,13 +31,12 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-package com.mymonero.mymonero
+package com.mymonero.Application
 
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.content.Intent
-
-
+import com.mymonero.mymonero.R
 
 class MainActivity : AppCompatActivity()
 {

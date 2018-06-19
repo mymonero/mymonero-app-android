@@ -31,10 +31,18 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //
-package com.mymonero.mymonero
+package com.mymonero.Settings
 
 import android.content.Context
 import android.util.Log
+import com.mymonero.KotlinUtils.EventEmitter
+import com.mymonero.Currencies.Currency
+import com.mymonero.Currencies.CurrencySymbol
+import com.mymonero.KotlinUtils.BuiltDependency
+import com.mymonero.Passwords.ChangePasswordRegistrant
+import com.mymonero.Passwords.DeleteEverythingRegistrant
+import com.mymonero.Passwords.PasswordController
+import com.mymonero.Persistence.*
 import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.newSingleThreadContext
@@ -69,7 +77,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 			get() {
 				//
 				// Here, this is not synchronized, because it's assumed that whoever is calling it is not doing so from an application code context, and is probably calling it prior to the construction of any instance
-				return this._inThread_existing_saved_documentContentString != null
+				return _inThread_existing_saved_documentContentString != null
 			}
 		private val _inThread_existing_saved_documentContentString: String?
 			get() {
@@ -120,7 +128,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 		//
 		val key: String = this.rawValue
 		companion object {
-			val setForbidden_DictKeys: List<DictKey> = listOf(DictKey._id)
+			val setForbidden_DictKeys: List<DictKey> = listOf(_id)
 		}
 	}
 	//
@@ -254,7 +262,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 				self.passwordController.addRegistrantForChangePassword(self)
 			}
 			//
-			val documentContentString = SettingsController._inThread_existing_saved_documentContentString
+			val documentContentString = _inThread_existing_saved_documentContentString
 			if (documentContentString == null) {
 				self._inThread_initWithDefaults()
 				return@runSync
@@ -501,7 +509,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 		val err_str = DocumentPersister.Write(
 			documentFileWithString = documentFileString,
 			id = this._id!!,
-			collectionName = SettingsController.collectionName
+			collectionName = collectionName
 		)
 		if (err_str != null) {
 			Log.e("Settings", "Error while saving ${this}: ${err_str}")
@@ -516,7 +524,7 @@ class SettingsController: BuiltDependency, IdleTimeoutAfterS_SettingsProvider, C
 	{
 		var err_str: String? = null
 		this.runSync { self -> // so as not to race with any saves
-			val (inner_err_str, _) = DocumentPersister.RemoveAllDocuments(collectionName = SettingsController.collectionName)
+			val (inner_err_str, _) = DocumentPersister.RemoveAllDocuments(collectionName = collectionName)
 			if (inner_err_str != null) {
 				err_str = inner_err_str
 			} else { // if delete succeeded

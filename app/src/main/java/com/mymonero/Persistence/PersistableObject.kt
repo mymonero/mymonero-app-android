@@ -31,9 +31,12 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //
-package com.mymonero.mymonero
+package com.mymonero.Persistence
 
 import android.util.Log
+import com.mymonero.KotlinUtils.EventEmitter
+import com.mymonero.Passwords.Password
+import com.mymonero.Passwords.PasswordProvider
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -136,8 +139,8 @@ open class PersistableObject
 	// Internal - Accessors
 	fun new_encrypted_serializedFileRepresentation(): String {
 		val plaintextDict = this.new_dictRepresentation()
-		val plaintextString = PersistableObject.new_plaintextJSONStringFromDocumentDict(plaintextDict)
-		val encryptedString = PersistableObject.new_encryptedStringFrom(plaintextString, this.passwordProvider.password!!)
+		val plaintextString = new_plaintextJSONStringFromDocumentDict(plaintextDict)
+		val encryptedString = new_encryptedStringFrom(plaintextString, this.passwordProvider.password!!)
 		//
 		return encryptedString
 	}

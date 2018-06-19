@@ -31,9 +31,13 @@
 //  THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-package com.mymonero.mymonero
+package com.mymonero.Currencies
 
 import android.util.Log
+import com.mymonero.MyMoneroCore.DoubleFromMoneroAmount
+import com.mymonero.KotlinUtils.EventEmitter
+import com.mymonero.MyMoneroCore.MoneroAmount
+import com.mymonero.MyMoneroCore.MoneroConstants
 import java.math.RoundingMode
 import java.text.DecimalFormat
 import kotlin.math.pow
@@ -89,7 +93,7 @@ enum class Currency(val rawValue: String)
 
 	val symbol: CurrencySymbol
 		get() {
-			if (this == Currency.none) {
+			if (this == none) {
 				throw AssertionError(".none has no symbol")
 			}
 			return this.rawValue
@@ -100,25 +104,25 @@ enum class Currency(val rawValue: String)
 		}
 	val uid: CurrencyUID
 		get() {
-			if (this == Currency.none) {
+			if (this == none) {
 				throw AssertionError(".none has no symbol")
 			}
 			return this.rawValue
 		}
 	val hasAtomicUnits: Boolean
-		get() = this == Currency.XMR
+		get() = this == XMR
 	val unitsForDisplay: Int
 		get() {
-			if (this == Currency.XMR) {
+			if (this == XMR) {
 				return MoneroConstants.currency_unitPlaces
 			}
 			return 2
 		}
 	val lazy_allCurrencies: List<Currency> by lazy {
-		listOf(Currency.XMR, Currency.USD, Currency.AUD, Currency.BRL, Currency.CAD, Currency.CHF,
-			Currency.CNY, Currency.EUR, Currency.GBP, Currency.HKD, Currency.INR, Currency.JPY,
-			Currency.KRW, Currency.MXN, Currency.NOK, Currency.NZD, Currency.SEK, Currency.SGD,
-			Currency.TRY, Currency.RUB, Currency.ZAR)
+		listOf(XMR, USD, AUD, BRL, CAD, CHF,
+			CNY, EUR, GBP, HKD, INR, JPY,
+			KRW, MXN, NOK, NZD, SEK, SGD,
+			TRY, RUB, ZAR)
 	}
 	val lazy_allCurrencySymbols: List<CurrencySymbol> by lazy {
 		this.lazy_allCurrencies.map { it.symbol }
@@ -126,13 +130,13 @@ enum class Currency(val rawValue: String)
 	//
 	fun nonAtomicCurrency_localized_formattedString(
 		final_amountDouble: Double,
-		decimalSeparator: String = Currency.decimalSeparator
+		decimalSeparator: String = Companion.decimalSeparator
 	) : String {
-		assert(this != Currency.XMR)
+		assert(this != XMR)
 		if (final_amountDouble == 0.0) {
 			return "0"
 		}
-		val naiveLocalizedString = MoneyAmountFormatters.localized_bigDecimalParsing_doubleFormatter .format(final_amountDouble)!!
+		val naiveLocalizedString = MoneyAmountFormatters.localized_bigDecimalParsing_doubleFormatter.format(final_amountDouble)!!
 		val components = naiveLocalizedString.split(decimalSeparator)
 		val components_count = components.size
 		if (components_count <= 0) {
@@ -163,11 +167,11 @@ enum class Currency(val rawValue: String)
 		return component_1 + decimalSeparator + component_2 + rightSidePaddingZeroes
 	}
 	fun displayUnitsRounded_amountInCurrency(moneroAmount: MoneroAmount): Double? {
-		if (this == Currency.none) {
+		if (this == none) {
 			throw AssertionError("Selected currency unexpectedly .none")
 		}
 		val moneroAmountDouble = DoubleFromMoneroAmount(moneroAmount)
-		if (this == Currency.XMR) {
+		if (this == XMR) {
 			return moneroAmountDouble
 		}
 		val xmrToCurrencyRate = CcyConversionRatesController.rateFromXMR_orNilIfNotReady(toCurrency = this)
@@ -190,7 +194,7 @@ enum class Currency(val rawValue: String)
 			userInputAmountDouble: Double,
 			selectedCurrency: Currency
 		) : Double? {
-			if (selectedCurrency == Currency.none) {
+			if (selectedCurrency == none) {
 				throw AssertionError("Selected currency unexpectedly .none")
 			}
 			val xmrToCurrencyRate = CcyConversionRatesController.rateFromXMR_orNilIfNotReady(toCurrency = selectedCurrency)
@@ -213,7 +217,7 @@ object CcyConversionRatesController
 
 	init
 	{
-		this.setup()
+		setup()
 	}
 	private fun setup() {}
 
@@ -221,35 +225,35 @@ object CcyConversionRatesController
 		if (currency == Currency.none || currency == Currency.XMR) {
 			throw AssertionError("Invalid 'currency' argument value")
 		}
-		return this.xmrToCurrencyRatesByCurrencyUID[currency.uid] != null
+		return xmrToCurrencyRatesByCurrencyUID[currency.uid] != null
 	}
 
 	fun rateFromXMR_orNilIfNotReady(toCurrency: Currency) : CcyConversion_Rate? {
 		if (toCurrency == Currency.none || toCurrency == Currency.XMR) {
 			throw AssertionError("Invalid 'currency' argument value")
 		}
-		return this.xmrToCurrencyRatesByCurrencyUID[toCurrency.uid]
+		return xmrToCurrencyRatesByCurrencyUID[toCurrency.uid]
 	}
 
 	fun set(XMRToCurrencyRate: CcyConversion_Rate, forCurrency: Currency, isPartOfBatch: Boolean = false) : Boolean {
 		val doNotNotify = isPartOfBatch
-		val wasSetValueDifferent = XMRToCurrencyRate != this.xmrToCurrencyRatesByCurrencyUID[forCurrency.uid]
-		this.xmrToCurrencyRatesByCurrencyUID[forCurrency.uid] = XMRToCurrencyRate
+		val wasSetValueDifferent = XMRToCurrencyRate != xmrToCurrencyRatesByCurrencyUID[forCurrency.uid]
+		xmrToCurrencyRatesByCurrencyUID[forCurrency.uid] = XMRToCurrencyRate
 		if (doNotNotify != true) {
-			this._notifyOf_updateTo_XMRToCurrencyRate()
+			_notifyOf_updateTo_XMRToCurrencyRate()
 		}
 		return wasSetValueDifferent
 	}
 
 	fun ifBatched_notifyOf_set_XMRToCurrencyRate() {
-		Log.d("CcyConversionRates", "Received updates: ${this.xmrToCurrencyRatesByCurrencyUID}")
-		this._notifyOf_updateTo_XMRToCurrencyRate()
+		Log.d("CcyConversionRates", "Received updates: $xmrToCurrencyRatesByCurrencyUID")
+		_notifyOf_updateTo_XMRToCurrencyRate()
 	}
 
 	fun set_xmrToCcyRatesByCcy(xmrToCcyRatesByCcy: Map<Currency, Double>) {
 		var wasAnyRateChanged = false
 		for ((currency, rate) in xmrToCcyRatesByCcy) {
-			val wasSetValueDifferent = this.set(
+			val wasSetValueDifferent = set(
 				XMRToCurrencyRate = rate,
 				forCurrency = currency,
 				isPartOfBatch = true
@@ -259,11 +263,11 @@ object CcyConversionRatesController
 			}
 		}
 		if (wasAnyRateChanged) {
-			this.ifBatched_notifyOf_set_XMRToCurrencyRate()
+			ifBatched_notifyOf_set_XMRToCurrencyRate()
 		}
 	}
 
 	private fun _notifyOf_updateTo_XMRToCurrencyRate() {
-		this.didUpdateAvailabilityOfRates_fns.invoke(this, null)
+		didUpdateAvailabilityOfRates_fns.invoke(this, null)
 	}
 }

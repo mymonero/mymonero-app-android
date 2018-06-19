@@ -35,7 +35,6 @@ package com.mymonero.mymonero
 
 import android.support.test.InstrumentationRegistry
 import android.support.test.runner.AndroidJUnit4
-import kotlinx.android.synthetic.main.activity_main.*
 
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,9 +42,20 @@ import org.junit.runner.RunWith
 import org.junit.Assert.*
 
 import android.util.Log
-import kotlinx.coroutines.experimental.async
+import com.mymonero.Application.MainApplication
+import com.mymonero.Application.UserIdleController
+import com.mymonero.Currencies.CcyConversionRatesController
+import com.mymonero.Currencies.Currency
+import com.mymonero.Currencies.CurrencySymbol
+import com.mymonero.MyMoneroCore.DoubleFromMoneroAmount
+import com.mymonero.MyMoneroCore.FormattedString
+import com.mymonero.MyMoneroCore.MoneroAmount
+import com.mymonero.MyMoneroCore.MoneroAmountFrom
+import com.mymonero.Passwords.*
+import com.mymonero.Persistence.*
+import com.mymonero.Settings.IdleTimeoutAfterS_SettingsProvider
+import com.mymonero.Settings.SettingsController
 import kotlinx.coroutines.experimental.delay
-import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.runBlocking
 import org.junit.Assert
 import java.math.RoundingMode
