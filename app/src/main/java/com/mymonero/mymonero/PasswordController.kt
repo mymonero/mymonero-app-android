@@ -36,8 +36,6 @@ package com.mymonero.mymonero
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.experimental.*
-import java.util.Timer
-import kotlin.concurrent.schedule
 import java.lang.ref.WeakReference
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
@@ -140,32 +138,14 @@ interface DeleteEverythingRegistrant: PasswordControllerEventParticipant
 	fun passwordController_DeleteEverything(): String? // return err_str:String if error. at time of writing, this was able to be kept synchronous.
 }
 //
-class PasswordControllerInitParams(
-	context: Context,
-	userIdleController: UserIdleController
-) {
-	val context = context
-	val userIdleController = userIdleController
-}
-class PasswordController: PasswordProvider
+class PasswordController: BuiltDependency, PasswordProvider
 {
 	//
 	// Class
 	companion object
 	{
-		val appInstance by lazy { ForApp.instance }
-		//
 		val minPasswordLength = 6
 		val maxLegal_numberOfTriesDuringThisTimePeriod = 5
-	}
-	// Singleton - Application - Interal
-	private object ForApp {
-		val instance = PasswordController(
-			PasswordControllerInitParams(
-				context = MainApplication.applicationContext(),
-				userIdleController = UserIdleController.appInstance
-			)
-		)
 	}
 	//
 	enum class DictKey(val rawValue: String)
@@ -199,8 +179,8 @@ class PasswordController: PasswordProvider
 	val havingDeletedEverything_didDeconstructBootedStateAndClearPassword_fns = EventEmitter<PasswordController, String>()
 	//
 	// Properties - Dependencies
-	val context: Context
-	val userIdleController: UserIdleController
+	private lateinit var applicationContext: Context
+	private lateinit var userIdleController: UserIdleController
 	//
 	// Synchronization
 	val syncThreadContext_threadName = "PasswordController-newSingleThreadContext"
@@ -341,16 +321,20 @@ class PasswordController: PasswordProvider
 	val plaintextMessageToSaveForUnlockChallenges = "this is just a string that we'll use for checking whether a given password can unlock an encrypted version of this very message"
 	//
 	// Internal - Lifecycle
-	constructor(
-		initParams: PasswordControllerInitParams
-	) {
-		this.context = initParams.context
-		this.userIdleController = initParams.userIdleController
-		//
-		this.setup()
-	}
-	fun setup()
+	constructor() {}
+	fun init_applicationContext(dep: Context)
 	{
+		this.applicationContext = dep
+	}
+	fun init_userIdleController(dep: UserIdleController)
+	{
+		this.userIdleController = dep
+	}
+	override fun setup()
+	{
+		if (this.applicationContext == null || this.userIdleController == null) {
+			throw AssertionError("PasswordController missing dependency")
+		}
 		this.startObserving_userIdle()
 		this.initializeRuntimeAndBoot()
 	}
@@ -360,7 +344,8 @@ class PasswordController: PasswordProvider
 			this._userDidBecomeIdle()
 		}
 	}
-	private fun initializeRuntimeAndBoot() {
+	private fun initializeRuntimeAndBoot()
+	{
 		this.runSync { self -> // is blocking
 			self._inThread_initializeRuntimeAndBoot()
 		}
@@ -591,13 +576,13 @@ class PasswordController: PasswordProvider
 				} catch (e: Exception) {
 					this._inThread_unguard_getNewOrExistingPassword()
 					Log.e("Passwords", "Error while decrypting message for unlock challenge: ${e} ${e.localizedMessage}")
-					val err_str = this._new_incorrectPasswordValidationErrorMessageString(this.context)
+					val err_str = this._new_incorrectPasswordValidationErrorMessageString(this.applicationContext)
 					this.erroredWhileGettingExistingPassword_fns.invoke(this, err_str)
 					return@cb
 				}
 				if (plaintextString != this.plaintextMessageToSaveForUnlockChallenges) {
 					this._inThread_unguard_getNewOrExistingPassword()
-					val err_str = this._new_incorrectPasswordValidationErrorMessageString(this.context)
+					val err_str = this._new_incorrectPasswordValidationErrorMessageString(this.applicationContext)
 					this.erroredWhileGettingExistingPassword_fns.invoke(this, err_str)
 					return@cb
 				}
@@ -702,7 +687,7 @@ class PasswordController: PasswordProvider
 					}
 					if (_isCurrentlyLockedOut == true) { // do not try to check pw - return as validation err
 						Log.d("Passwords", "🚫  Received password entry attempt but currently locked out.")
-						validationErr_orNull = this.context.resources.getString(R.string.as_a_security_precaution_please_wait)
+						validationErr_orNull = this.applicationContext.resources.getString(R.string.as_a_security_precaution_please_wait)
 						// setup or extend unlock timer - NOTE: this is pretty strict - we don't strictly need to extend the timer each time to prevent spam unlocks
 						__cancelAnyAndRebuildUnlockTimer()
 					}
@@ -742,7 +727,7 @@ class PasswordController: PasswordProvider
 					if (userSelectedTypeOfPassword == PasswordType.PIN) {
 						if (obtainedPasswordString!!.count() < PasswordController.minPasswordLength) { // self is too short. get back to them with a validation err by re-entering obtainPasswordFromUser_cb
 							self._inThread_unguard_getNewOrExistingPassword()
-							val err_str = self.context.resources.getString(R.string.enter_longer_pin)
+							val err_str = self.applicationContext.resources.getString(R.string.enter_longer_pin)
 							self.erroredWhileSettingNewPassword_fns(self, err_str)
 							return@runSync // bail
 						}
@@ -751,14 +736,14 @@ class PasswordController: PasswordProvider
 					} else if (userSelectedTypeOfPassword == PasswordType.password) {
 						if (obtainedPasswordString!!.count() < PasswordController.minPasswordLength) { // this is too short. get back to them with a validation err by re-entering obtainPasswordFromUser_cb
 							self._inThread_unguard_getNewOrExistingPassword()
-							val err_str = self.context.resources.getString(R.string.enter_longer_password)
+							val err_str = self.applicationContext.resources.getString(R.string.enter_longer_password)
 							self.erroredWhileSettingNewPassword_fns.invoke(self, err_str)
 							return@runSync // bail
 						}
 						// TODO: check if password content too weak?
 					} else { // this is weird - code fault or cracking attempt?
 						self._inThread_unguard_getNewOrExistingPassword()
-						val err_str = self.context.resources.getString(R.string.unrecognized_password_type)
+						val err_str = self.applicationContext.resources.getString(R.string.unrecognized_password_type)
 						self.erroredWhileSettingNewPassword_fns.invoke(self, err_str)
 						throw AssertionError(err_str) // consider fatal
 					}
@@ -768,11 +753,11 @@ class PasswordController: PasswordProvider
 							//
 							var err_str: String
 							if (userSelectedTypeOfPassword == PasswordType.password) {
-								err_str = self.context.resources.getString(R.string.enter_fresh_password)
+								err_str = self.applicationContext.resources.getString(R.string.enter_fresh_password)
 							} else if (userSelectedTypeOfPassword == PasswordType.PIN) {
-								err_str = self.context.resources.getString(R.string.enter_fresh_pin)
+								err_str = self.applicationContext.resources.getString(R.string.enter_fresh_pin)
 							} else {
-								err_str = self.context.resources.getString(R.string.unrecognized_password_type)
+								err_str = self.applicationContext.resources.getString(R.string.unrecognized_password_type)
 								throw AssertionError(err_str) // considered fatal
 							}
 							self.erroredWhileSettingNewPassword_fns.invoke(self, err_str)
@@ -1041,7 +1026,7 @@ class PasswordController: PasswordProvider
 					)
 					if (isGoodEnteredPassword == false) {
 						self._inThread_unguard_getNewOrExistingPassword()
-						val err_str = self._new_incorrectPasswordValidationErrorMessageString(self.context)
+						val err_str = self._new_incorrectPasswordValidationErrorMessageString(self.applicationContext)
 						self.errorWhileChangingPassword_fns.invoke(self, err_str)
 						return@cb2
 					}
@@ -1209,7 +1194,7 @@ class PasswordController: PasswordProvider
 							)
 							if (isGoodEnteredPassword == false) {
 								self._inThread_unguard_getNewOrExistingPassword()
-								val err_str = self._new_incorrectPasswordValidationErrorMessageString(self.context)
+								val err_str = self._new_incorrectPasswordValidationErrorMessageString(self.applicationContext)
 								self.errorWhileAuthorizingForAppAction_fns.invoke(self, err_str)
 								return@enterExisting_fn
 							}

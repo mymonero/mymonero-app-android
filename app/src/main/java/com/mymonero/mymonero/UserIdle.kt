@@ -42,36 +42,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 //
-class UserIdleControllerInitParams(
-	idleTimeoutAfterS_settingsProvider: IdleTimeoutAfterS_SettingsProvider
-) {
-	val idleTimeoutAfterS_settingsProvider = idleTimeoutAfterS_settingsProvider
-}
-class UserIdleController
+class UserIdleController: BuiltDependency
 {
-	//
-	// Singleton - Application - Interface
-	companion object
-	{
-		val appInstance by lazy { ForApp.instance }
-	}
-	//
-	// Singleton - Application - Internal
-	private object ForApp
-	{
-		val instance = UserIdleController(
-			UserIdleControllerInitParams(
-				idleTimeoutAfterS_settingsProvider = SettingsController
-			)
-		)
-	}
 	//
 	// Emitters
 	val userDidComeBackFromIdle_fns = EventEmitter<UserIdleController, String>()
 	val userDidBecomeIdle_fns = EventEmitter<UserIdleController, String>()
 	//
 	// Properties - Initial
-	private val idleTimeoutAfterS_settingsProvider: IdleTimeoutAfterS_SettingsProvider
+	private lateinit var idleTimeoutAfterS_settingsProvider: IdleTimeoutAfterS_SettingsProvider
 	// Properties - Runtime - Interface
 	var _isUserIdle = AtomicBoolean(false)
 	val isUserIdle: Boolean
@@ -83,14 +62,19 @@ class UserIdleController
 	private var _userIdle_currentIntervalTask_scheduledFuture = AtomicReference<ScheduledFuture<*>?>(null)
 	//
 	// Lifecycle - Init
-	constructor(initParams: UserIdleControllerInitParams)
+	constructor()
 	{
-		this.idleTimeoutAfterS_settingsProvider = initParams.idleTimeoutAfterS_settingsProvider
-		//
-		this.setup()
+		// setup is deferred til after injection
 	}
-	fun setup()
+	fun init_idleTimeoutAfterS_settingsProvider(dep: IdleTimeoutAfterS_SettingsProvider)
 	{
+		this.idleTimeoutAfterS_settingsProvider = dep
+	}
+	override fun setup()
+	{
+		if (this.idleTimeoutAfterS_settingsProvider == null) {
+			throw AssertionError("UserIdleController missing dependency")
+		}
 		this.startObserving()
 		// ^- let's do the above first
 		//

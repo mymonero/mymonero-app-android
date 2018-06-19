@@ -34,18 +34,72 @@ package com.mymonero.mymonero
 
 import android.app.Application
 import android.content.Context
-
-class MainApplication : Application() {
-	init {
-		instance = this
+//
+open class ApplicationServiceLocator: ServiceLocator
+{
+	//
+	// Properties - Interface
+	val applicationContext: Context by lazy {
+		if (MainApplication.instance == null) {
+			throw AssertionError("nil MainApplication.instance")
+		}
+		MainApplication.instance.applicationContext
 	}
-	companion object {
-		private lateinit var instance: MainApplication
-		fun applicationContext(): Context {
-			return instance.applicationContext
+	//
+	lateinit var settingsController: SettingsController
+		private set
+	lateinit var userIdleController: UserIdleController
+		private set
+	lateinit var passwordController: PasswordController
+		private set
+	//
+	init
+	{
+		this.assemble()
+	}
+	override fun assemble()
+	{
+		// I. Instantiate
+		this.passwordController = PasswordController()
+		this.userIdleController = UserIdleController()
+		this.settingsController = SettingsController()
+		//
+		// II. Assemble graph
+		this.passwordController.init_applicationContext(this.applicationContext)
+		this.passwordController.init_userIdleController(this.userIdleController)
+		//
+		this.userIdleController.init_idleTimeoutAfterS_settingsProvider(this.settingsController)
+		//
+		this.settingsController.init_applicationContext(this.applicationContext)
+		this.settingsController.init_passwordController(this.passwordController)
+		//
+		// III. Setup ("build()")
+		this.passwordController.setup()
+		this.userIdleController.setup()
+		this.settingsController.setup()
+	}
+}
+//
+class MainApplicationServiceLocator: ApplicationServiceLocator() {}
+//
+//
+class MainApplication : Application()
+{
+	companion object
+	{
+		lateinit var instance: MainApplication
+		//
+		val serviceLocator: MainApplicationServiceLocator by lazy {
+			MainApplicationServiceLocator()
 		}
 	}
-	override fun onCreate() {
+	//
+	init
+	{
+		MainApplication.instance = this
+	}
+	override fun onCreate()
+	{
 		super.onCreate()
 	}
 }

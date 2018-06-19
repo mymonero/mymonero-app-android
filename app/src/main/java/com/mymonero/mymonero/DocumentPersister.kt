@@ -155,7 +155,7 @@ object DocumentPersister
 				inCollectionName = collectionName,
 				documentId = id
 			)
-			val context = MainApplication.applicationContext()
+			val context = MainApplication.instance.applicationContext
 			val deleted = context.deleteFile(fileDescription.new_filename)
 			if (deleted) {
 				numRemoved += 1
@@ -179,7 +179,7 @@ object DocumentPersister
 		collectionName: CollectionName
 	): ErrorOr_DocumentFileDescriptions {
 		var fileDescriptions = mutableListOf<DocumentFileDescription>()
-		val context = MainApplication.applicationContext()
+		val context = MainApplication.instance.applicationContext
 		val listOfFiles = context.fileList()
 		// filtering to what should be app DocumentPersister files
 		val filenameSuffix = ".${DocumentFileDescription.filenameExt}"
@@ -233,7 +233,7 @@ object DocumentPersister
 		var string: String?
 		var fis: FileInputStream? = null
 		try {
-			fis = MainApplication.applicationContext().openFileInput(
+			fis = MainApplication.instance.applicationContext.openFileInput(
 				documentFileDescription.new_filename
 			)
 			val isr = InputStreamReader(fis)
@@ -261,7 +261,7 @@ object DocumentPersister
 	) {
 		var fos: FileOutputStream? = null
 		try {
-			fos = MainApplication.applicationContext().openFileOutput(
+			fos = MainApplication.instance.applicationContext.openFileOutput(
 				fileDescription.new_filename,
 				Context.MODE_PRIVATE
 			)
