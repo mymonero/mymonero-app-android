@@ -34,11 +34,11 @@ package com.mymonero.Application
 
 import android.app.Application
 import android.content.Context
+
 import com.mymonero.Passwords.PasswordController
 import com.mymonero.KotlinUtils.ServiceLocator
 import com.mymonero.Persistence.DocumentPersister
 import com.mymonero.Settings.SettingsController
-
 //
 open class ApplicationServiceLocator: ServiceLocator
 {
@@ -60,6 +60,8 @@ open class ApplicationServiceLocator: ServiceLocator
 		private set
 	lateinit var passwordController: PasswordController
 		private set
+	lateinit var appLib_bridge: AppLib_Bridge
+		private set
 	//
 	init
 	{
@@ -68,11 +70,14 @@ open class ApplicationServiceLocator: ServiceLocator
 	override fun assemble()
 	{
 		// I. Instantiate
+		this.appLib_bridge = AppLib_Bridge()
 		this.passwordController = PasswordController()
 		this.userIdleController = UserIdleController()
 		this.settingsController = SettingsController()
 		//
 		// II. Assemble graph
+		this.appLib_bridge.init_applicationContext(this.applicationContext)
+		//
 		this.passwordController.init_applicationContext(this.applicationContext)
 		this.passwordController.init_documentPersister(this.documentPersister)
 		this.passwordController.init_userIdleController(this.userIdleController)
@@ -84,6 +89,7 @@ open class ApplicationServiceLocator: ServiceLocator
 		this.settingsController.init_passwordController(this.passwordController)
 		//
 		// III. Setup ("build()")
+		this.appLib_bridge.setup()
 		this.passwordController.setup()
 		this.userIdleController.setup()
 		this.settingsController.setup()

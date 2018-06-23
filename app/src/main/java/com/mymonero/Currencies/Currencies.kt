@@ -184,7 +184,8 @@ enum class Currency(val rawValue: String)
 		//
 		return truncated_amount
 	}
-	companion object {
+	companion object
+	{
 		//
 		val localeSymbols = (DecimalFormat.getInstance() as? DecimalFormat)?.decimalFormatSymbols
 		val decimalSeparator = Character.toString(localeSymbols?.decimalSeparator ?: '.')
