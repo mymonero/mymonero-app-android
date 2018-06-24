@@ -1,5 +1,5 @@
 //
-//  PasswordController.kt
+//  AppLib_Bridge.kt
 //  MyMonero
 //
 //  Copyright (c) 2014-2018, MyMonero.com
@@ -57,8 +57,7 @@ class AppLib_Bridge: BuiltDependency
 	{
 		this.applicationContext = dep
 	}
-	override fun setup()
-	{
+	override fun setup() {
 		if (this.applicationContext == null) {
 			throw AssertionError("Missing dependencies")
 		}
@@ -71,6 +70,14 @@ class AppLib_Bridge: BuiltDependency
 	// Accessors
 	external fun stringFromJNI(): String
 	//
-	// Imperatives
+	// Imperatives - Lifecycle
 	external fun initLib(documentsPath: String)
+	//
+	// Imperatives - Runtime -
+
+	//
+	// Imperatives - Runtime - UserIdle
+//	external fun breakIdle();
+//	external fun temporarilyDisable_userIdle();
+//	external fun reEnable_userIdle();
 }

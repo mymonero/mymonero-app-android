@@ -85,8 +85,6 @@ class UserIdleController: BuiltDependency
 	}
 	fun startObserving()
 	{
-		// TODO: observe some central dispatch center? or just have activities call UserIdle directly?
-//		NotificationCenter.default.addObserver(this, selector: #selector(MMApplication_didSendEvent(_:)), name: MMApplication.NotificationNames.didSendEvent.notificationName, object: null)
 	}
 	//
 	// Lifecycle - Teardown
@@ -192,15 +190,6 @@ class UserIdleController: BuiltDependency
 		if (old_task != null) {
 			throw AssertionError("Expected this._userIdle_intervalTimer == null")
 		}
-	}
-	//
-	// Delegation - Notifications
-	private fun MMApplication_didSendEvent()
-	{
-		// TODO;
-		//
-		this._idleBreakingActionOccurred()
-		// TODO: also detect when app is being controlled w/o touching the screen - e.g. via Simulator keyboard (or perhaps external)…
 	}
 	//
 	// Delegation - Internal
